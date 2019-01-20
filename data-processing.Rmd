@@ -18,9 +18,9 @@ library(tidyverse)
 
 ```{r load data}
 setwd('../data/')
-MME <-read_csv("raw_fish_kill_data_10_24_2018.csv")
-thermal <-read_csv("raw_thermal_metrics.csv")
-NHD_WBIC <-read_csv("raw_NHD_WBIC.csv") %>%
+MME <-read_csv("fish_kill_data_10_24_2018.csv")
+thermal <-read_csv("thermal_metrics.csv")
+NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
   mutate(WBIC = as.character(WBIC))
 thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
@@ -248,7 +248,7 @@ Since the cleaning steps are identical to the above, we remove the commentary.
 
 ```{r}
 setwd("../data")
-thermal <- read_tsv('raw_ACCESS_thermal_metrics.tsv') %>%
+thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
   inner_join(NHD_WBIC, by = "site_id")
 ```
 
