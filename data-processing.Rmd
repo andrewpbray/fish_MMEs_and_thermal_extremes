@@ -17,7 +17,7 @@ library(tidyverse)
 ```
 
 ```{r load data}
-setwd('../data/')
+setwd('data/')
 MME <-read_csv("fish_kill_data_10_24_2018.csv")
 thermal <-read_csv("thermal_metrics.csv")
 NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
