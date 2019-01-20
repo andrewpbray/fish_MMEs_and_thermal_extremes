@@ -1,0 +1,481 @@
+---
+title: "Data Tidying and Cleaning"
+author: "Aaron Till and Andrew Bray"
+output: github_document
+--- 
+
+# Part I: Historical Data
+
+## Data import
+
+```{r installing packages}
+library(rgdal)
+library(stringr)
+library(lubridate)
+#library(raster)
+library(tidyverse)
+```
+
+```{r load data}
+setwd('../data/')
+MME <-read_csv("Fish Kill Data Updated 10_24_2018.csv")
+thermal <-read_csv("thermal_metrics.csv")
+NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
+  mutate(WBIC = as.character(WBIC))
+thermal <- left_join(thermal, NHD_WBIC, by = "site_id")
+```
+
+
+## Prelimary cleaning
+
+First we strip out unneeded columns and tidy. There are a few instances of multiple
+MMEs being recorded in the same lake in the same month, we treat as just a single 
+MME event.
+
+```{r}
+MME <- MME %>%
+  filter(Min.Kill.Size!="Excludable") %>%
+  dplyr::select(WBIC,
+                Year,
+                Cause.Category, Cause.Type,
+                Investigation.Start.Month,
+                Fishkill.Inv.Seq.No,
+                Cause.Category.4) %>%
+  rename(month = Investigation.Start.Month) %>%
+  mutate(month = as.character(fct_recode(as.factor(month),
+                                         "jan" = "Jan",
+                                         "feb" = "Feb",
+                                         "mar" = "Mar",
+                                         "apr" = "Apr",
+                                         "may" = "May",
+                                         "jun" = "Jun",
+                                         "jul" = "Jul",
+                                         "aug" = "Aug",
+                                         "sep" = "Sep",
+                                         "oct" = "Oct",
+                                         "nov" = "Nov",
+                                         "dec" = "Dec")),
+         WBIC = as.character(WBIC)) %>%
+  distinct(WBIC, Year, month, .keep_all = TRUE)
+
+names(MME) <- str_to_lower(names(MME))
+```
+
+For the thermal data, we first only retain distinct `Year` X `WBIC` combinations.
+In general, these were distinct, but there were a few anomolous `WBIC` that
+had multiple records for each year.
+
+```{r}
+thermal <- thermal  %>%
+  filter(!is.na(WBIC)) %>%
+  distinct(Year, WBIC, .keep_all = TRUE)
+
+names(thermal) <- str_to_lower(names(thermal))
+```
+
+For now, we process the annual and monthly thermal data separately. This is for
+the sake of computational efficiency; they are merged later.
+
+```{r}
+thermal_annual <- thermal %>%
+  dplyr::select(-contains('jas'),
+                -starts_with('mean_surf_'),
+                -starts_with('mean_bot_'), 
+                -starts_with('max_surf_'), 
+                -starts_with('max_bot_'),
+                -site_id)
+ 
+thermal_monthly <- thermal %>%
+  dplyr::select(starts_with('mean_surf_'),
+                starts_with('mean_bot_'), 
+                starts_with('max_surf_'), 
+                starts_with('max_bot_'),
+                -contains('jas'),
+                year, wbic) %>%
+  gather(key="type", value="temperature", 
+         starts_with('mean_surf_'),
+         starts_with('mean_bot_'), 
+         starts_with('max_surf_'), 
+         starts_with('max_bot_')) %>%
+  separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
+  unite(metric, metric, depth) %>%
+  spread(metric, temperature) %>%
+  arrange(wbic, year, month)
+
+rm(thermal)
+```
+
+
+## Merging MME with thermal and diagnostics
+
+```{r}
+df <- thermal_monthly %>%
+  left_join(thermal_annual, by = c("year", "wbic")) %>%
+  left_join(MME, by = c("year", "month", "wbic"))
+
+rm(thermal_monthly, thermal_annual)
+```
+
+See section below called "merge matching"" that verifies this.
+
+## Cleaning and creating covariates for modeling
+
+```{r}
+df <- df %>%
+  mutate(date = ymd(paste(year, month, "15"))) %>%
+  filter(date > "2003-01-01", date < "2014-05-01") %>%
+  mutate(mme  = ifelse(!is.na(fishkill.inv.seq.no), 1, 0),
+         summerkill    = ifelse(cause.category.4 == "SUMMERKILL", 1, 0),
+         winterkill    = ifelse(cause.category.4 == "WINTERKILL", 1, 0),
+         infection     = ifelse(cause.category.4 == "INFECTIOUS AGENT", 1, 0),
+         anthropogenic = ifelse(cause.category.4 == "ANTHROPOGENIC CONDITION", 1, 0))
+```
+
+Turn each of the temperature readings into z-scores based on their deviation from 
+that lake's monthly data. Also add additional useful covariates and do some renaming.
+
+```{r}
+df <- df %>%
+  group_by(wbic, month) %>%
+  mutate(max_bot_z = scale(max_bot),
+         max_surf_z = scale(max_surf),
+         mean_bot_z = scale(mean_bot),
+         mean_surf_z = scale(mean_surf)) %>%
+  ungroup() %>%
+  mutate(layer_diff = mean_surf - mean_bot,
+         quadratic_temp = mean_surf^2,
+         season = fct_collapse(month,
+                               "winter" = "dec",
+                               "winter" = "jan",
+                               "winter" = "feb",
+                               "spring" = "mar",
+                               "spring" = "apr",
+                               "spring" = "may",
+                               "summer" = "jun",
+                               "summer" = "jul",
+                               "summer" = "aug",
+                               "fall"   = "sep",
+                               "fall"   = "oct",
+                               "fall"   = "nov")) %>%
+  rename(ice_duration = ice_duration_days,
+         schmidt = schmidt_daily_annual_sum,
+         variance_after_ice_30 = coef_var_0.30, 
+         variance_after_ice_60 = coef_var_30.60, 
+         cumulative_above_0 = gdd_wtr_0c,
+         cumulative_above_5 = gdd_wtr_5c,
+         cumulative_above_10 = gdd_wtr_10c)
+```
+
+
+## Add spatial data
+
+First the spatial covariates of the lakes.
+
+```{r}
+spatial <- readOGR("lake_shapes", layer = 'model_lakes')
+spatial_df <- as_tibble(spatial) %>%
+  bind_cols(as_tibble(coordinates(spatial))) %>%
+  mutate(site_id = as.character(site_id)) %>%
+  left_join(NHD_WBIC, by = "site_id") %>%
+  filter(!is.na(WBIC)) %>%
+  rename(lat = V2,
+         lon = V1) %>%
+  select(lat, lon, WBIC)
+
+names(spatial_df) <- str_to_lower(names(spatial_df))
+
+# Represent each lake by just one lat/lon
+spatial_df <- spatial_df %>%
+  group_by(wbic) %>%
+  summarize(lon = mean(lon),
+            lat = mean(lat))
+
+rm(spatial)
+```
+
+Merge into existing data.
+
+```{r}
+df <- df %>%
+  left_join(spatial_df, by = "wbic")
+```
+
+Next, the 2010 census block covariates from https://www.census.gov/geo/maps-data/data/tiger-data.html
+
+```{r}
+census <- readOGR("census_data", layer = 'tabblock2010_55_pophu')
+census_df <- as_tibble(census) %>%
+  dplyr::select(POP10) %>%
+  bind_cols(as_tibble(coordinates(census))) %>%
+  rename(lat = V2,
+         lon = V1) %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  group_by(lon_round, lat_round) %>%
+  summarize(population = sum(POP10)) %>%
+  select(lon_round, lat_round, population)
+  
+rm(census)
+```
+
+```{r}
+df <- df %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  left_join(census_df, by = c("lon_round", "lat_round")) %>%
+  select(-lon_round, -lat_round)
+```
+
+
+## Write out processed historical data
+
+```{r}
+setwd("../processed-data")
+write_csv(df, "historical_data.csv")
+
+rm(df)
+```
+
+
+
+
+# Part II: Future Data
+
+To make a dataset containing the information needed to predict MMEs into the future, we read in a new thermals data set and process it in the same way that we did the historical data. We then merge in the same spatial and census data since it is lake-specific.
+
+Since the cleaning steps are identical to the above, we remove the commentary.
+
+```{r}
+setwd("../data")
+thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
+  inner_join(NHD_WBIC, by = "site_id")
+```
+
+```{r}
+thermal <- thermal  %>%
+  distinct(year, WBIC, .keep_all = TRUE)
+
+names(thermal) <- str_to_lower(names(thermal))
+```
+
+```{r}
+thermal_annual <- thermal %>%
+  dplyr::select(-contains('jas'),
+                -starts_with('mean_surf_'),
+                -starts_with('mean_bot_'), 
+                -starts_with('max_surf_'), 
+                -starts_with('max_bot_'),
+                -site_id)
+ 
+thermal_monthly <- thermal %>%
+  dplyr::select(starts_with('mean_surf_'),
+                starts_with('mean_bot_'), 
+                starts_with('max_surf_'), 
+                starts_with('max_bot_'),
+                -contains('jas'),
+                year, wbic) %>%
+  gather(key="type", value="temperature", 
+         starts_with('mean_surf_'),
+         starts_with('mean_bot_'), 
+         starts_with('max_surf_'), 
+         starts_with('max_bot_')) %>%
+  separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
+  unite(metric, metric, depth) %>%
+  spread(metric, temperature) %>%
+  arrange(wbic, year, month)
+
+rm(thermal)
+```
+
+```{r}
+df <- thermal_monthly %>%
+  left_join(thermal_annual, by = c("wbic", "year"))
+
+rm(thermal_monthly, thermal_annual)
+```
+
+```{r}
+df <- df %>%
+  mutate(date = ymd(paste(year, month, "15"))) %>%
+  filter(date > "2014-05-01")
+```
+
+```{r}
+df <- df %>%
+  group_by(wbic, month) %>%
+  mutate(max_bot_z = scale(max_bot),
+         max_surf_z = scale(max_surf),
+         mean_bot_z = scale(mean_bot),
+         mean_surf_z = scale(mean_surf)) %>%
+  ungroup() %>%
+  mutate(layer_diff = mean_surf - mean_bot,
+         quadratic_temp = mean_surf^2,
+         season = fct_collapse(month,
+                               "winter" = "dec",
+                               "winter" = "jan",
+                               "winter" = "feb",
+                               "spring" = "mar",
+                               "spring" = "apr",
+                               "spring" = "may",
+                               "summer" = "jun",
+                               "summer" = "jul",
+                               "summer" = "aug",
+                               "fall"   = "sep",
+                               "fall"   = "oct",
+                               "fall"   = "nov")) %>%
+  rename(ice_duration = ice_duration_days,
+         schmidt = schmidt_daily_annual_sum,
+         variance_after_ice_30 = coef_var_0.30, 
+         variance_after_ice_60 = coef_var_30.60, 
+         cumulative_above_0 = gdd_wtr_0c,
+         cumulative_above_5 = gdd_wtr_5c,
+         cumulative_above_10 = gdd_wtr_10c)
+```
+
+```{r}
+df <- df %>%
+  left_join(spatial_df, by = "wbic") %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  left_join(census_df, by = c("lon_round", "lat_round"))
+```
+
+```{r}
+setwd("../processed-data")
+write_csv(df, "future_data.csv")
+
+rm(df)
+```
+
+
+# THE FOLLOWING CODE HAS NOT YET BEEN REVISED
+
+# Snowfall Data
+
+
+
+```{r}
+
+
+  
+tidy_snow <- function(data_input, year, month) {
+  
+  e <-extent(-92.9, -87, 42.4 , 46.9)
+  a <- crop(raster(data_input),e)
+  
+  a1 <- as.data.frame(coordinates(a))
+  a2<- as.data.frame(a)
+  
+  data <- na.omit(cbind(a1, a2)) 
+   
+  names(data) <- c('x', 'y', 'snow')
+
+  data$long_round <- round(data$x, 1)
+  data$lat_round <- round(data$y, 1)  
+
+  data_output <- data %>%
+  group_by(long_round, lat_round) %>%
+  summarise(Snow = mean(snow))
+    
+  
+  data_output$Year <- year
+  data_output$Month <- month
+  return(data_output)
+
+}
+
+
+```
+
+
+```{r}
+
+setwd('/home/aatill/Till_Thesis/Summer_Research_Work/MME_Climate_Change_Research/Input_Data/Prism Data/PRISM_Precip/')
+
+snow_data <- rbind(tidy_snow('2004/PRISM_ppt_stable_4kmM3_200401_asc.asc',2004, 'Jan'),
+                        tidy_snow('2004/PRISM_ppt_stable_4kmM3_200402_asc.asc', 2004, 'Feb'),
+                        tidy_snow('2004/PRISM_ppt_stable_4kmM3_200412_asc.asc', 2004, 'Dec'),
+                        tidy_snow('2005/PRISM_ppt_stable_4kmM3_200501_asc.asc', 2005, 'Jan'),
+                        tidy_snow('2005/PRISM_ppt_stable_4kmM3_200502_asc.asc', 2005, 'Feb'),
+                        tidy_snow('2005/PRISM_ppt_stable_4kmM3_200512_asc.asc', 2005, 'Dec'),
+                        tidy_snow('2006/PRISM_ppt_stable_4kmM3_200601_asc.asc', 2006, 'Jan'),
+                        tidy_snow('2006/PRISM_ppt_stable_4kmM3_200602_asc.asc', 2006, 'Feb'),
+                        tidy_snow('2006/PRISM_ppt_stable_4kmM3_200612_asc.asc', 2006, 'Dec'),
+                        tidy_snow('2007/PRISM_ppt_stable_4kmM3_200701_asc.asc', 2007, 'Jan'),
+                        tidy_snow('2007/PRISM_ppt_stable_4kmM3_200702_asc.asc', 2007, 'Feb'),
+                        tidy_snow('2007/PRISM_ppt_stable_4kmM3_200712_asc.asc', 2007, 'Dec'),
+                        tidy_snow('2008/PRISM_ppt_stable_4kmM3_200801_asc.asc', 2008, 'Jan'),
+                        tidy_snow('2008/PRISM_ppt_stable_4kmM3_200802_asc.asc', 2008, 'Feb'),
+                        tidy_snow('2008/PRISM_ppt_stable_4kmM3_200812_asc.asc', 2008, 'Dec'),
+                        tidy_snow('2009/PRISM_ppt_stable_4kmM3_200901_asc.asc', 2009, 'Jan'),
+                        tidy_snow('2009/PRISM_ppt_stable_4kmM3_200902_asc.asc', 2009, 'Feb'),
+                        tidy_snow('2009/PRISM_ppt_stable_4kmM3_200912_asc.asc', 2009, 'Dec'),
+                        tidy_snow('2010/PRISM_ppt_stable_4kmM3_201001_asc.asc', 2010, 'Jan'),
+                        tidy_snow('2010/PRISM_ppt_stable_4kmM3_201002_asc.asc', 2010, 'Feb'),
+                        tidy_snow('2010/PRISM_ppt_stable_4kmM3_201012_asc.asc', 2010, 'Dec'),
+                        tidy_snow('2011/PRISM_ppt_stable_4kmM3_201101_asc.asc', 2011, 'Jan'),
+                        tidy_snow('2011/PRISM_ppt_stable_4kmM3_201102_asc.asc', 2011, 'Feb'),
+                        tidy_snow('2011/PRISM_ppt_stable_4kmM3_201112_asc.asc', 2011, 'Dec'),
+                        tidy_snow('2012/PRISM_ppt_stable_4kmM3_201201_asc.asc', 2012, 'Jan'),
+                        tidy_snow('2012/PRISM_ppt_stable_4kmM3_201202_asc.asc', 2012, 'Feb'), 
+                        tidy_snow('2012/PRISM_ppt_stable_4kmM3_201212_asc.asc', 2012, 'Dec'),
+                        tidy_snow('2013/PRISM_ppt_stable_4kmM3_201301_asc.asc', 2013, 'Jan'),
+                        tidy_snow('2013/PRISM_ppt_stable_4kmM3_201302_asc.asc', 2013, 'Feb'), 
+                        tidy_snow('2013/PRISM_ppt_stable_4kmM3_201312_asc.asc', 2013, 'Dec'))
+
+
+```
+
+
+
+
+# Merge matching
+
+Most of the new columns should be NAs because most year x month x wbic combos don't have
+MME data. Hopefully the number of non-NAs is the same as the number of MMEs.
+
+```{r eval = FALSE}
+df %>%
+  map(~sum(!is.na(.)))
+```
+
+That's an unexpected number. It's neither the total number of MMEs nor the total
+number of unique `wbic`s. We can check to see how many of the MMEs correponded
+to year x month x wbic combos that weren't unique, i.e. there were multiple MMEs
+in the same lake in the same month.
+
+```{r eval = FALSE}
+MME %>%
+  select(wbic, year, month) %>%
+  duplicated() %>%
+  sum()
+```
+
+So twelve of those MMEs were stacked up on top of others. They will be tacked on
+to the bottom of the merged df with the thermal data copied over. That's fine, but
+it still doesn't solve the problem.
+
+We can also check to see if the wbic set in `MME` is a subset of those in `tf`.
+
+```{r eval = FALSE}
+length(intersect(MME$wbic, tf$wbic))
+length(unique(MME$wbic))
+```
+
+Ah, so here is where we lose some MMEs: not all of the MMEs find matching `wbic` in the
+thermals data set. That's a bummer. We can check to see if this explains all of the
+discrepancy found in the join by doing this subsetting of MME before the join and check
+if it looks the same as if we hadn't subsetted.
+
+```{r eval = FALSE}
+match_set <- intersect(MME$wbic, tf$wbic)
+MME_shrunk <- MME %>%
+  filter(wbic %in% match_set)
+
+df2 <- tf %>%
+  left_join(MME_shrunk)
+```
+
+Yep, they're the same, so that's the explanation.
+
+
