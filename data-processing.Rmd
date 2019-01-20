@@ -232,7 +232,6 @@ df <- df %>%
 ## Write out processed historical data
 
 ```{r}
-setwd("../processed-data")
 write_csv(df, "historical_data.csv")
 
 rm(df)
@@ -249,7 +248,7 @@ Since the cleaning steps are identical to the above, we remove the commentary.
 
 ```{r}
 setwd("../data")
-thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
+thermal <- read_tsv('raw_ACCESS_thermal_metrics.tsv') %>%
   inner_join(NHD_WBIC, by = "site_id")
 ```
 
@@ -343,7 +342,6 @@ df <- df %>%
 ```
 
 ```{r}
-setwd("../processed-data")
 write_csv(df, "future_data.csv")
 
 rm(df)
