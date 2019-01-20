@@ -18,15 +18,15 @@ library(tidyverse)
 
 ```{r load data}
 setwd('../data/')
-MME <-read_csv("Fish Kill Data Updated 10_24_2018.csv")
-thermal <-read_csv("thermal_metrics.csv")
-NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
+MME <-read_csv("raw_fish_kill_data_10_24_2018.csv")
+thermal <-read_csv("raw_thermal_metrics.csv")
+NHD_WBIC <-read_csv("raw_NHD_WBIC.csv") %>%
   mutate(WBIC = as.character(WBIC))
-thermal <- left_join(thermal, NHD_WBIC, by = "site_id")
+thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
 
 
-## Prelimary cleaning
+## Preliminary cleaning
 
 First we strip out unneeded columns and tidy. There are a few instances of multiple
 MMEs being recorded in the same lake in the same month, we treat as just a single 
@@ -62,13 +62,15 @@ names(MME) <- str_to_lower(names(MME))
 ```
 
 For the thermal data, we first only retain distinct `Year` X `WBIC` combinations.
-In general, these were distinct, but there were a few anomolous `WBIC` that
-had multiple records for each year.
+In general, these were distinct, but there were a few `WBIC` that
+had multiple records for each year due to fact that a single lake can have multiple
+`site_id`s where data is collected. We represent the thermal data for such lakes
+with the average values across all sites.
 
 ```{r}
-thermal <- thermal  %>%
-  filter(!is.na(WBIC)) %>%
-  distinct(Year, WBIC, .keep_all = TRUE)
+thermal <- thermal %>%
+  group_by(WBIC, Year) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE)
 
 names(thermal) <- str_to_lower(names(thermal))
 ```
