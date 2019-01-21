@@ -1,5 +1,5 @@
 # Load packages and data
-library(ggplot2)
+library(tidyverse)
 library(ggthemes)
 library(ggmap)
 library(gridExtra)
@@ -40,6 +40,7 @@ boxplot_a <- fig1a_data %>%
   xlab(NULL)+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) + 
   ggtitle('a') +
+  theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = NULL))
 
 boxplot_c <- fig1a_data %>%
@@ -53,6 +54,7 @@ boxplot_c <- fig1a_data %>%
         axis.line = element_line(colour = "black", 
                                  size = 0.5, linetype = "solid"))+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) +
+  theme(text = element_text(family = 'sans'))+
   theme(axis.text = element_text(size=13))+
   
   xlab(NULL) +
