@@ -1,5 +1,5 @@
 ---
-title: "Modeling"
+title: "Process Models"
 author: "Aaron Till and Andrew Bray"
 output: html_document
 ---
@@ -10,89 +10,47 @@ library(caret)
 library(glmnet)
 library(Matrix)
 library(e1071)
+library(broom)
 ```
 
-## Prepare data
+## Load models and data
 
 ```{r}
-setwd("data/processed/")
-historical_data <- read_csv("historical_data.csv")
-historical_data <- historical_data %>%
-  mutate(summerkill = factor(ifelse(is.na(summerkill), 0, summerkill)))
-future_data     <- read_csv("future_data.csv")
+lasso_fit_1 <- read_rds("data/models/lasso_fit_1.rds")
+lasso_fit_1b <- read_rds("data/models/lasso_fit_1b.rds")
+lasso_fit_2 <- read_rds("data/models/lasso_fit_2.rds")
+lasso_fit_3 <- read_rds("data/models/lasso_fit_3.rds")
+future_data <- read_csv("data/processed/future_data.csv")
 ```
+
+```{r}
+plot(lasso_fit_1)
+summary(lasso_fit_1)
+```
+
+
+
+```{r}
+library(broom)
+
+coefs <- m1$glmnet.fit %>%
+  tidy() %>%
+  filter(lambda == m1$lambda.1se)
+
+coefs %>%
+  slice(-1) %>%
+  ggplot(aes(fct_reorder(term, estimate), estimate, fill = estimate > 0)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    x = NULL
+  )
+```
+
 
 ## Model 1: Lasso Logistic
 
-### Tune model
-
-First we must create the training and testing partitions. We begin this naively,
-taking an SRS approach instead of a moving-windows time-series approach.
-
 ```{r}
-set.seed(998)
-in_training <- createDataPartition(historical_data$summerkill,
-                                  p = .75, list = FALSE)
-training <- historical_data %>%
-  slice(in_training) %>%
-  select(lat, lon, schmidt, variance_after_ice_30,
-         variance_after_ice_60, cumulative_above_0,
-         cumulative_above_5,  cumulative_above_10,
-         max_surf, mean_bot, max_bot, mean_surf, 
-         max_surf_z, mean_bot_z, max_bot_z, mean_surf_z, 
-         summerkill, population)
-
-testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(lat, lon, schmidt, variance_after_ice_30,
-         variance_after_ice_60, cumulative_above_0,
-         cumulative_above_5,  cumulative_above_10,
-         max_surf, mean_bot, max_bot, mean_surf, 
-         max_surf_z, mean_bot_z, max_bot_z, mean_surf_z, 
-         summerkill, population)
-```
-
-In order to compare coefficients, we center and scale the predictors.
-
-```{r}
-pre_proc_values <- preProcess(training, method = c("center", "scale"))
-train_transformed <- predict(pre_proc_values, training)
-test_transformed  <- predict(pre_proc_values, testing)
-```
-
-
-Next we fit LASSO models with many difference lambdas, utilizing a 10-fold CV
-scheme, repeated 10 times, on the training data.
-
-```{r}
-fitControl <- trainControl(method = "repeatedcv",
-                           number = 5,
-                           repeats = 1)
-
-library(doParallel)
-cl <- makePSOCKcluster(6)
-registerDoParallel(cl)
-
-set.seed(825)
-lasso_fit_1 <- train(summerkill ~ ., data = train_transformed, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
-lasso_fit_1b <- train(summerkill ~ ., data = training, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
-stopCluster(cl)
-write_rds(lasso_fit_1, "../lasso_fit_1.rds")
-write_rds(lasso_fit_1b, "../lasso_fit_1b.rds")
-```
-
-
-### Assess model
-
-Next we see if we can recreate fig 2 using the predictions from this model.
-
-```{r eval = FALSE}
 future_test <- future_data %>%
   select(lat, lon, schmidt, variance_after_ice_30,
          variance_after_ice_60, cumulative_above_0,
@@ -101,7 +59,6 @@ future_test <- future_data %>%
          max_surf_z, mean_bot_z, max_bot_z, 
          mean_surf_z, population)
 
-lasso_fit_1 <- read_rds("../models/lasso_fit_1.rds")
 predictions_1 <- predict(object=lasso_fit_1, future_test,
                        type = "prob") %>%
   select(2)
@@ -119,7 +76,7 @@ df_fig_2 %>%
 
 Compute likelihood on testing data.
 
-```{r eval = FALSE}
+```{r}
 test_true <- as.logical(as.integer(as.character(testing$summerkill)))
 L_1 <- predict(object=lasso_fit_1, select(testing, -summerkill),
                type = "prob") %>%
@@ -134,49 +91,6 @@ L_1 <- predict(object=lasso_fit_1, select(testing, -summerkill),
 
 
 ## Model 2: Lasso logistic with season fixed effects
-
-### Fit model
-
-```{r}
-training <- historical_data %>%
-  slice(in_training) %>%
-  select(lat, lon, schmidt, variance_after_ice_30,
-         variance_after_ice_60, cumulative_above_0,
-         cumulative_above_5,  cumulative_above_10,
-         max_surf, mean_bot, max_bot, mean_surf, 
-         max_surf_z, mean_bot_z, max_bot_z, mean_surf_z, 
-         summerkill, population, season) %>%
-  mutate(season = as_factor(season))
-
-testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(lat, lon, schmidt, variance_after_ice_30,
-         variance_after_ice_60, cumulative_above_0,
-         cumulative_above_5,  cumulative_above_10,
-         max_surf, mean_bot, max_bot, mean_surf, 
-         max_surf_z, mean_bot_z, max_bot_z, mean_surf_z, 
-         summerkill, population, season) %>%
-  mutate(season = as_factor(season))
-```
-
-```{r}
-pre_proc_values <- preProcess(training, method = c("center", "scale"))
-train_transformed <- predict(pre_proc_values, training)
-test_transformed  <- predict(pre_proc_values, testing)
-```
-
-```{r}
-cl <- makePSOCKcluster(6)
-registerDoParallel(cl)
-
-set.seed(825)
-lasso_fit_2 <- train(summerkill ~ ., data = training, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
-stopCluster(cl)
-write_rds(lasso_fit_2, "../lasso_fit_2.rds")
-```
 
 ### Assess model
 
@@ -227,8 +141,6 @@ L_2 <- predict(object=lasso_fit_2, select(testing, -summerkill),
 ### Assess model
 
 ```{r, eval = FALSE}
-lasso_fit_3 <- read_rds("../models/lasso_fit_3.rds")
-
 future_test <- future_data %>%
   select(lat, lon, schmidt, variance_after_ice_30,
          variance_after_ice_60, cumulative_above_0,
