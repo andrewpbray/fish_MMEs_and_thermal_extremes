@@ -1,3 +1,4 @@
+# Load packages and data
 library(ggplot2)
 library(ggthemes)
 library(ggmap)
@@ -7,7 +8,7 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data <- read_csv('../data/processed/historical_data.csv')
 
 
 # Summer
@@ -18,12 +19,11 @@ fig1a_data <- historical_data %>%
   mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'INFECTIOUS AGENT'), 'Infectious Agent'))
 
 
-fig1a_data$sig <- ifelse(fig1a_data$cause.category.4 == 'Summerkill', 'p<.05', 'p>.05')
-fig1a_data$sig <- factor(fig1a_data$sig, levels = c('p>.05', 'p<.05'))
+fig1a_data$sig <- factor(ifelse(fig1a_data$cause.category.4 == 'Summerkill', 'p<.05', 'p>.05'),levels = c('p>.05', 'p<.05'))
 
 boxplot_a <- fig1a_data %>%
-  filter(month == 'jul' | month == 'jun' | month == 'aug' | month == 'sep') %>%
-  filter(cause.category.4 == 'Summerkill' | cause.category.4 == 'Summer Non-event' | cause.category.4 == 'Infectious Agent') %>%   
+  filter(month %in% c("jul", "jun", "aug", "sep")) %>%
+  filter(cause.category.4 %in% c('Infectious Agent', "Summerkill", "Summer Non-event")) %>%   
   ggplot(aes(y = mean_surf,x = cause.category.4)) +
   theme_tufte() +  
   ylab('Mean Surf. Temp. (°C)')+
@@ -114,11 +114,9 @@ boxplot_d <- fig1b_data %>%
   scale_fill_manual(values = c('grey', 'grey'))
 
 
-
-
 xbox <- grid.arrange(boxplot_a,boxplot_b,ncol = 2, widths = c(6, 3.6))
 ybox <- grid.arrange(boxplot_c,boxplot_d, ncol = 2, widths = c(6, 3.6))
 
-grid.arrange(xbox, ybox)
-
+p <- grid.arrange(xbox, ybox)
+ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
 
