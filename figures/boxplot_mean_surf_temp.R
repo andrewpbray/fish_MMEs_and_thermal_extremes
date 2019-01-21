@@ -93,6 +93,7 @@ boxplot_b <- fig1b_data%>%
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig))+ 
   guides(fill = FALSE)+ 
   ggtitle('b') +
+  theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'grey'))
 
 boxplot_d <- fig1b_data %>%
@@ -113,6 +114,7 @@ boxplot_d <- fig1b_data %>%
   scale_fill_brewer()+ 
   guides(fill = FALSE)+ 
   ggtitle('d') +
+  theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'grey'))
 
 

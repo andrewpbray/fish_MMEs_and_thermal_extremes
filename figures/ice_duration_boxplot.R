@@ -31,6 +31,10 @@ boxplot <- fig_SI2_data %>%
         axis.line = element_line(colour = "black", 
                                  size = 0.5, linetype = "solid"))+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig_ice)) + 
+  theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = NULL))
 
 boxplot
+
+ggsave("ice_duration_boxplot.png", boxplot, width = 8, height = 5)
+
