@@ -26,7 +26,7 @@ fig_SI5_data <- Wi_Lakes_Maps %>% left_join(MME_data, By = WBIC) %>% mutate(MME 
 
 
 
-fig_SI5_data %>%
+boxplot <- fig_SI5_data %>%
   filter(!is.na(OFFICIAL_MAX_DEPTH_VALUE)) %>%
   filter(!is.na(MME)) %>%
   group_by(WBIC) %>%
@@ -36,22 +36,12 @@ fig_SI5_data %>%
   ylim(0,110) +
   geom_boxplot(aes(group = Dieoffs), outlier.alpha = 0.1)+
   guides(colour = FALSE)+
-  theme(text = element_text(family = 'sans'))+
-  theme_tufte()
+  theme_tufte() +
+  theme(text = element_text(family = 'sans'))
+
+boxplot
+
+ggsave("depth_boxplot.png", boxplot, width = 8, height = 5)
 
 
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
-
-
-####TEST######
-
-
-anova_depth <- aov(Depth ~ factor(MME), fig_SI5_data %>%
-                     filter(!is.na(OFFICIAL_MAX_DEPTH_VALUE)) %>%
-                     filter(!is.na(MME)) %>%
-                     group_by(WBIC) %>%
-                     summarise(Depth = mean(as.numeric(OFFICIAL_MAX_DEPTH_VALUE)), MME = max(MME)))
-summary(anova_depth)
-tuk <- TukeyHSD(anova_depth)
-tuk
 

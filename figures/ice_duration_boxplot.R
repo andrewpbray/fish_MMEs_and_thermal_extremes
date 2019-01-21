@@ -36,5 +36,5 @@ boxplot <- fig_SI2_data %>%
 
 boxplot
 
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
+ggsave("ice_duration_boxplot.png", boxplot, width = 8, height = 5)
 

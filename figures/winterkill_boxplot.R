@@ -1,4 +1,4 @@
-library(ggplot2)
+library(tidyverse)
 library(ggthemes)
 library(ggmap)
 library(gridExtra)
@@ -12,14 +12,27 @@ historical_data = read_csv('../processed-data/historical_data.csv')
 
 snow_data = read_csv('../processed-data/snow_data.csv')
 
-snow_data$month = tolower(snow_data$Month)
+snow_data = snow_data %>%
+  mutate(month = ifelse(Month == '01', 'jan', Month)) %>%
+  mutate(month = ifelse(Month == '02', 'feb', month)) %>%
+  mutate(month = ifelse(Month == '12', 'dec', month))
+
 snow_data$year = snow_data$Year
+snow_data$lat = snow_data$lat_round
+snow_data$lon = snow_data$long_round
 
 fig_SI4_data <- historical_data %>% 
   filter(month == 'jan' | month == 'feb' | month == 'dec') %>%
-  inner_join(snow_data, by = c('year', 'month')) %>%
+  mutate(lon = round(lon,1)) %>%
+  mutate(lat = round(lat,1))
+
+  
+fig_SI4_data <- inner_join(fig_SI4_data, snow_data, by = c('year', 'month', 'lat','lon')) 
+  
+  
+fig_SI4_data = fig_SI4_data %>%  
   mutate(mme_binary = ifelse(is.na(mme), 0, mme), 
-         winterkill_binary = ifelse(is.na(winterkill), 0 , winterkill))
+         winterkill = ifelse(is.na(winterkill), 0 , winterkill))
 
 
 
@@ -41,6 +54,7 @@ boxplot <- fig_SI4_data %>%
   theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = NULL))
 
+
 boxplot
 
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
+ggsave("winterkill_boxplot.png", boxplot, width = 8, height = 5)

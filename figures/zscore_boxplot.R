@@ -35,7 +35,7 @@ boxplot <- fig_SI1_data %>%
 
 boxplot
 
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
+ggsave("zscore_boxplot.png", boxplot, width = 8, height = 5)
 
 
 
