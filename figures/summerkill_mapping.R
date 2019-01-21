@@ -59,16 +59,17 @@ fig3_data = bind_rows(historical_data, future_predictions) %>%
 
 
 map <- ggmap(Wisconsin_map) + 
-  geom_point(data = arrange(ult_data, Prob), aes(x = V1, V2, color = Prob, alpha = Prob), size = 0.5)+
+  geom_point(data = arrange(fig3_data, Prob), aes(x = V1, V2, color = Prob, alpha = Prob), size = 0.5)+
   scale_color_gradient(low = 'Blue', high = 'Red',na.value = 'red', limits = c(0, 1)) +
-  theme( panel.border = element_rect(colour = "black", fill=NA, size=3),
-        plot.margin=unit(c(1,0.3,1,2), "cm"))+
+  #theme( panel.border = element_rect(colour = "black", fill=NA, size=3),
+        #plot.margin=unit(c(1,0.3,1,2), "cm")+
   ylab('Latitude')+
   xlab('Longitude')+
   guides(alpha = FALSE) +
   scale_alpha(limits = c(0,1))+
   geom_path(data = map_data_w, aes(x = long, y = lat, group = group))  +
   theme(text = element_text(family = 'sans'))+
+  theme_bw()+
   facet_grid(.~generation)
 map
 

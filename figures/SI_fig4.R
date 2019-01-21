@@ -38,7 +38,9 @@ boxplot <- fig_SI4_data %>%
   theme(text = element_text(size=13),axis.text = element_text(size=13),
         axis.line = element_line(colour = "black", 
                                  size = 0.5, linetype = "solid"))+
+  theme(text = element_text(family = 'sans'))+
   scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = NULL))
 
 boxplot
 
+ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)

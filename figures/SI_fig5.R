@@ -36,8 +36,11 @@ fig_SI5_data %>%
   ylim(0,110) +
   geom_boxplot(aes(group = Dieoffs), outlier.alpha = 0.1)+
   guides(colour = FALSE)+
+  theme(text = element_text(family = 'sans'))+
   theme_tufte()
 
+
+ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
 
 
 ####TEST######
