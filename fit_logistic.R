@@ -7,28 +7,16 @@ setwd("data/processed/")
 historical_data <- read_csv("historical_data.csv",
                             col_types = list(wbic = col_factor(NULL),
                                              month  = col_factor(NULL),
-                                             season = col_factor(NULL)))
-historical_data <- historical_data %>%
-  mutate(summerkill = factor(ifelse(is.na(summerkill), 0, summerkill)))
-
-levels(historical_data$summerkill) <- c("neg", "pos")
+                                             season = col_factor(NULL),
+                                             summerkill = col_factor(NULL)))
 
 # logistic reg
 
-pr <- historical_data %>%
-  select(max_surf, mean_surf, mean_bot) %>%
-  prcomp(center = TRUE, scale = TRUE)
-
-synth_temp <- historical_data %>%
-  select(max_surf, mean_surf, mean_bot) %>%
-  as.matrix() %*% pr$rotation[,1]
-
 h <- historical_data %>%
-  add_column(synth_temp) %>%
-  select(wbic, variance_after_ice_30, variance_after_ice_60,
+  dplyr::select(wbic, variance_after_ice_30, variance_after_ice_60,
          stratified_period_count, schmidt, cumulative_above_10,
          ice_duration, summerkill, population, lon, lat, season,
-         synth_temp)
+         temp_index)
 
 h2 <- h %>%
   mutate_if(is.numeric, scale)
@@ -36,6 +24,8 @@ h2 <- h %>%
 h3 <- h %>%
   group_by(season) %>%
   mutate_if(is.numeric, scale)
+
+# logistic regression w no season or wbic
 
 m1 <- glm(summerkill ~ . - wbic - season, 
           data = h2, family = "binomial")
@@ -50,7 +40,7 @@ m2 <- glm(summerkill ~ . -wbic,
 h4 <- h3[complete.cases(h3),]
 y <- h4$summerkill == "pos"
 xy <- h4 %>%
-  select(-wbic) %>%
+  dplyr::select(-wbic) %>%
   model.matrix(y ~ ., data = .) %>%
   cbind(y)
 xy <- as.data.frame(xy)[,-1]
