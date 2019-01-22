@@ -31,7 +31,7 @@ Additional processing to make `caret` happy and faster.
 
 ```{r}
 levels(historical_data$summerkill) <- c("neg", "pos")
-historical_data <- historical_data %>%
+#historical_data <- historical_data %>%
   filter(summerkill == "neg") %>%
   sample_frac(.5) %>%
   bind_rows(filter(historical_data, summerkill == "pos"))
@@ -82,14 +82,14 @@ fitControl <- trainControl(method = "repeatedcv",
                            classProbs = TRUE)
 
 library(doParallel)
-cl <- makePSOCKcluster(7)
+cl <- makePSOCKcluster(6)
 registerDoParallel(cl)
 
 m1 <- cv.glmnet(summerkill ~ .,
                 data = historical_data[in_training, c(m1_vars, "summerkill")],
                 family = "binomial",
                 parallel = TRUE, 
-                type.measure = "deviance",
+                type.measure = "auc",
                 keep = TRUE
 )
 
