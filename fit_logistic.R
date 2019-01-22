@@ -1,0 +1,89 @@
+library(tidyverse)
+library(lme4)
+library(broom)
+library(bestglm)
+
+setwd("data/processed/")
+historical_data <- read_csv("historical_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL)))
+historical_data <- historical_data %>%
+  mutate(summerkill = factor(ifelse(is.na(summerkill), 0, summerkill)))
+
+levels(historical_data$summerkill) <- c("neg", "pos")
+
+# logistic reg
+
+pr <- historical_data %>%
+  select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+synth_temp <- historical_data %>%
+  select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+h <- historical_data %>%
+  add_column(synth_temp) %>%
+  select(wbic, variance_after_ice_30, variance_after_ice_60,
+         stratified_period_count, schmidt, cumulative_above_10,
+         ice_duration, summerkill, population, lon, lat, season,
+         synth_temp)
+
+h2 <- h %>%
+  mutate_if(is.numeric, scale)
+
+h3 <- h %>%
+  group_by(season) %>%
+  mutate_if(is.numeric, scale)
+
+m1 <- glm(summerkill ~ . - wbic - season, 
+          data = h2, family = "binomial")
+
+
+# m1 w fixed effect for season
+m2 <- glm(summerkill ~ . -wbic, 
+          data = h3, family = "binomial")
+
+
+# m2 w leaps and bounds selection algorithm
+h4 <- h3[complete.cases(h3),]
+y <- h4$summerkill == "pos"
+xy <- h4 %>%
+  select(-wbic) %>%
+  model.matrix(y ~ ., data = .) %>%
+  cbind(y)
+xy <- as.data.frame(xy)[,-1]
+xy$y <- as.integer(xy$y)
+  
+m3 <- bestglm(Xy = xy,
+        family = binomial,
+        IC = "AIC",
+        method = "exhaustive")
+
+
+
+# m2 w random effect for lake
+m4 <- glmer(summerkill ~ . - wbic + (1|wbic),
+             data = h, family = binomial, 
+             control = glmerControl(optimizer = "bobyqa"),
+             nAGQ = 10)
+
+
+
+# compare models
+stack_models <- bind_rows(tidy(m1), tidy(m2), tidy(m4)) %>%
+  add_column(model_num = rep(c("Model 1", "Model 2", "Model 3"),
+                             c(nrow(tidy(m1)), nrow(tidy(m2)), nrow(tidy(m4)))))
+
+stack_models %>%
+  filter(term != "(Intercept)", p.value < .05) %>%
+  ggplot(aes(fct_reorder(term, estimate), estimate, fill = estimate > 0)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  coord_flip() +
+  facet_grid(~ model_num) +
+  labs(
+    x = NULL
+  ) +
+  theme_bw()
+
