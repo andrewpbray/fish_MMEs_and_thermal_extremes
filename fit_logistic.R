@@ -8,7 +8,10 @@ historical_data <- read_csv("historical_data.csv",
                             col_types = list(wbic = col_factor(NULL),
                                              month  = col_factor(NULL),
                                              season = col_factor(NULL),
-                                             summerkill = col_factor(NULL)))
+                                             summerkill = col_factor(NULL),
+                                             stratification_duration = col_integer(),
+                                             stratification_onset_yday = col_integer(),
+                                             stratified_period_count = col_integer()))
 
 # logistic reg
 
@@ -50,7 +53,6 @@ m3 <- bestglm(Xy = xy,
         family = binomial,
         IC = "AIC",
         method = "exhaustive")
-
 
 
 # m2 w random effect for lake
