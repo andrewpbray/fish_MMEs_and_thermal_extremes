@@ -23,7 +23,7 @@ compute_quantile <- function(x, q, reps = 1000) {
 }
 
 # Process data
-predictions_1 <- predict(object = lasso_fit_1, 
+predictions_1 <- predict(object = m1, 
                          newx = select(future_data, m1_vars), 
                          type = "prob")$pos
 future_data$prob <- predictions_1
