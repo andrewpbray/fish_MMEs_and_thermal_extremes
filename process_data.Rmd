@@ -359,16 +359,37 @@ df <- df %>%
 ```
 
 ```{r}
-df <- df %>%
+df2 <- df %>%
   left_join(spatial_df, by = "wbic") %>%
   mutate(lon_round = round(lon, 1),
          lat_round = round(lat, 1)) %>%
-  left_join(census_df, by = c("lon_round", "lat_round")) %>%
-  drop_na()
+  left_join(census_df, by = c("lon_round", "lat_round"))
 ```
 
 ```{r}
-write_csv(df, "../processed/future_data.csv")
+df2 <- df2 %>%
+  dplyr::select(-lon_round, -lat_round) %>%
+  drop_na()
+#sapply(df2, function(x) {sum(is.na(x))})
+```
+
+Add temp_index column via PCA.
+
+```{r}
+pr <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+temp_index <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+df2 <- df2 %>%
+  add_column(temp_index)
+```
+
+```{r}
+write_csv(df2, "../processed/future_data.csv")
 
 rm(df)
 ```
