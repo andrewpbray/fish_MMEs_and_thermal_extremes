@@ -16,16 +16,48 @@ library(broom)
 ## Load models and data
 
 ```{r}
-lasso_fit_1 <- read_rds("data/models/lasso_fit_1.rds")
-lasso_fit_1b <- read_rds("data/models/lasso_fit_1b.rds")
-lasso_fit_2 <- read_rds("data/models/lasso_fit_2.rds")
-lasso_fit_3 <- read_rds("data/models/lasso_fit_3.rds")
-future_data <- read_csv("data/processed/future_data.csv")
+lasso_fit_1 <- read_rds("data/models/log_loss_opt.rds")
+lasso_fit_2 <- read_rds("data/models/log_loss_opt_5_repeats.rds")
 ```
 
 ```{r}
-plot(lasso_fit_1)
-summary(lasso_fit_1)
+ggplot(lasso_fit_1)
+
+m <- lasso_fit_1$finalModel
+plot(m)
+lambdas <- m %>%
+  tidy() %>%
+  select(lambda) %>%
+  distinct() %>%
+  pull()
+lambda_diff <- abs(lambdas - m$lambdaOpt)
+coef(m)[, which.min(lambda_diff)]
+
+
+ggplot(lasso_fit_2)
+m2 <- lasso_fit_2$finalModel
+plot(m2)
+lambdas2 <- m2 %>%
+  tidy() %>%
+  select(lambda) %>%
+  distinct() %>%
+  pull()
+lambda_diff2 <- abs(lambdas2 - m2$lambdaOpt)
+tibble(coef_1 = coef(m)[, which.min(lambda_diff)],
+       coef_2 = coef(m2)[, which.min(lambda_diff)])
+```
+
+```{r}
+tidy(m) %>%
+  mutate(diff = abs(lambda - m$lambdaOpt)) %>%
+  filter(diff == min(diff)) %>%
+  slice(-1) %>%
+  ggplot(aes(fct_reorder(term, estimate), estimate, fill = estimate > 0)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    x = NULL
+  )
 ```
 
 
@@ -33,9 +65,9 @@ summary(lasso_fit_1)
 ```{r}
 library(broom)
 
-coefs <- m1$glmnet.fit %>%
+coefs <- m %>%
   tidy() %>%
-  filter(lambda == m1$lambda.1se)
+  filter(lambda == min(lambda))
 
 coefs %>%
   slice(-1) %>%

@@ -31,11 +31,45 @@ Additional processing to make `caret` happy and faster.
 
 ```{r}
 levels(historical_data$summerkill) <- c("neg", "pos")
-#historical_data <- historical_data %>%
-  filter(summerkill == "neg") %>%
-  sample_frac(.5) %>%
-  bind_rows(filter(historical_data, summerkill == "pos"))
+
+# historical_data <- historical_data %>%
+#   filter(summerkill == "neg") %>%
+#   sample_frac(.0005) %>%
+#   bind_rows(filter(historical_data, summerkill == "pos"))
 ```
+
+Add collapse down colinear variables.
+
+```{r}
+pr <- historical_data %>%
+  select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+synth_temp <- historical_data %>%
+  select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+historical_data <- historical_data %>%
+  add_column(synth_temp)
+```
+
+```{r}
+m2_var <- c("wbic", "variance_after_ice_30", "variance_after_ice_60",
+            "stratified_period_count", "schmidt", "cumulative_above_10",
+            "ice_duration", "summerkill", "population", "lon", "lat", "season",
+            "synth_temp")
+set.seed(998)
+in_training <- createDataPartition(historical_data$summerkill,
+                                  p = .75, list = FALSE)
+training <- historical_data %>%
+  slice(in_training) %>%
+  select(m2_vars)
+
+testing  <- historical_data %>%
+  slice(-in_training) %>%
+  select(m2_vars)
+```
+
 
 
 ## Model 1: Lasso Logistic
@@ -77,38 +111,30 @@ scheme, repeated once, on the training data.
 ```{r}
 fitControl <- trainControl(method = "repeatedcv",
                            number = 5,
-                           repeats = 1,
-                           summaryFunction = twoClassSummary,
+                           repeats = 5,
+                           summaryFunction = mnLogLoss,
                            classProbs = TRUE)
 
 library(doParallel)
-cl <- makePSOCKcluster(6)
+cl <- makePSOCKcluster(8)
 registerDoParallel(cl)
 
-m1 <- cv.glmnet(summerkill ~ .,
-                data = historical_data[in_training, c(m1_vars, "summerkill")],
-                family = "binomial",
-                parallel = TRUE, 
-                type.measure = "auc",
-                keep = TRUE
-)
+par_grid <-  expand.grid(alpha = 1,
+                        lambda = seq(9e-8, 3.5e-7, length.out = 6))
 
-m2 <- cv.glmnet(summerkill ~ .,
-                data = historical_data[in_training, c(m1_vars, "summerkill")],
-                family = "binomial",
-                parallel = TRUE, 
-                type.measure = "auc",
-                keep = TRUE
-)
 
 set.seed(825)
 lasso_fit_1 <- train(summerkill ~ ., 
                      data = train_transformed, 
                      method = "glmnet", 
-                     metric = "ROC",
+                     metric = "mnLogLoss",
+                     tuneGrid = par_grid,
                      trControl = fitControl)
+ggplot(lasso_fit_1)
+
 stopCluster(cl)
-write_rds(lasso_fit_1, "../lasso_fit_1.rds")
+
+write_rds(lasso_fit_1, "../models/log_loss_opt_5_repeats.rds")
 
 lasso_fit_1b <- train(summerkill ~ ., data = training, 
                  method = "glmnet", 
@@ -186,3 +212,32 @@ lasso_fit_3 <- train(summerkill ~ ., data = training,
 stopCluster(cl)
 write_rds(lasso_fit_3, "../lasso_fit_3.rds")
 ```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+m1 <- cv.glmnet(summerkill ~ .,
+                data = historical_data[in_training, c(m1_vars, "summerkill")],
+                family = "binomial",
+                parallel = TRUE, 
+                type.measure = "auc",
+                keep = TRUE
+)
+
+m2 <- cv.glmnet(summerkill ~ .,
+                data = historical_data[in_training, c(m1_vars, "summerkill")],
+                family = "binomial",
+                parallel = TRUE, 
+                type.measure = "auc",
+                keep = TRUE
+)
+```
+
