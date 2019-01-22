@@ -11,7 +11,7 @@ library(spdep)
 # Load data
 historical_data <- read_csv('../data/processed/historical_data.csv')
 future_data     <- read_csv('../data/processed/future_data.csv')
-lasso_fit_1     <- read_rds("../data/models/lasso_fit_1_kappa.rds")
+lasso_fit_1     <- read_rds("../data/models/lasso_fit_1.rds")
 
 
 # Function to compute prediction interval via simulation
@@ -23,9 +23,10 @@ compute_quantile <- function(x, q, reps = 1000) {
 }
 
 # Process data
-predictions_1 <- predict(object = m1$glmnet.fit, future_data, type = "response") %>%
-  select(2)
-future_data$prob <- predictions_1$`1`
+predictions_1 <- predict(object = lasso_fit_1, 
+                         newx = select(future_data, m1_vars), 
+                         type = "prob")$pos
+future_data$prob <- predictions_1
 
 future_data <- future_data %>%
   group_by(year) %>%
