@@ -182,7 +182,7 @@ spatial_df <- as_tibble(spatial) %>%
   filter(!is.na(WBIC)) %>%
   rename(lat = V2,
          lon = V1) %>%
-  select(lat, lon, WBIC)
+ dplyr::select(lat, lon, WBIC)
 
 names(spatial_df) <- str_to_lower(names(spatial_df))
 
@@ -215,27 +215,55 @@ census_df <- as_tibble(census) %>%
          lat_round = round(lat, 1)) %>%
   group_by(lon_round, lat_round) %>%
   summarize(population = sum(POP10)) %>%
-  select(lon_round, lat_round, population)
+ dplyr::select(lon_round, lat_round, population)
   
 rm(census)
 ```
+
+Correct join using lat and lon, then get summerkill in good shape for reading into models,
+remove lots of NA cols, then drop remaining NA rows.
 
 ```{r}
 df <- df %>%
   mutate(lon_round = round(lon, 1),
          lat_round = round(lat, 1)) %>%
   left_join(census_df, by = c("lon_round", "lat_round")) %>%
-  select(-lon_round, -lat_round) %>%
+  dplyr::select(-lon_round, -lat_round)
+
+df <- df %>%
+  mutate(summerkill = factor(ifelse(is.na(summerkill), 
+                                    0, summerkill)))
+levels(df$summerkill) <- c("neg", "pos")
+df2 <- df %>%
+  dplyr::select(-cause.category, -cause.type,
+                -fishkill.inv.seq.no, -cause.category.4,
+                -winterkill, -infection, -anthropogenic) %>%
   drop_na()
+#sapply(df2, function(x) {sum(is.na(x))})
+```
+
+Add temp_index column via PCA.
+
+```{r}
+pr <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+temp_index <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+df2 <- df2 %>%
+  add_column(temp_index)
 ```
 
 
 ## Write out processed historical data
 
 ```{r}
-write_csv(df, "../processed/historical_data.csv")
+write_csv(df2, "../processed/historical_data.csv")
 
-rm(df)
+rm(df2)
 ```
 
 
@@ -340,7 +368,7 @@ df <- df %>%
 ```
 
 ```{r}
-write_csv(df, ".../processed/future_data.csv")
+write_csv(df, "../processed/future_data.csv")
 
 rm(df)
 ```
