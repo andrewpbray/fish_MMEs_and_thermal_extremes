@@ -31,8 +31,9 @@ future_data <- future_data %>%
   group_by(year) %>%
   summarize(Temp = mean(mean_surf),
             kills = sum(prob),
-            lb_kill    = compute_quantile(prob, q = .025, reps = 300),
-            ub_kill    = compute_quantile(prob, q = .975, reps = 300)) %>%
+            #lb_kill    = compute_quantile(prob, q = .025, reps = 300),
+            #ub_kill    = compute_quantile(prob, q = .975, reps = 300)
+            ) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted,
          lb_smooth = loess(kills ~ year, .)$fitted,
          ub_smooth = loess(kills ~ year, .)$fitted)
