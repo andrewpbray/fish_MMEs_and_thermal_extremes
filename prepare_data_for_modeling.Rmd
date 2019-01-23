@@ -1,0 +1,40 @@
+---
+title: "Prepare Data for Modeling"
+date: "1/23/2019"
+output: html_document
+---
+
+This file serves as a second pass at data processing with the aim to prepare and standardize the data that will be used to fit the various models.
+
+```{r}
+library(tidyverse)
+historical_data <- read_csv("data/processed/historical_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             summerkill = col_factor(NULL),
+                                             stratification_duration = col_double(),
+                                             stratification_onset_yday = col_double(),
+                                             stratified_period_count = col_double(),
+                                             ice_duration = col_double()))
+
+future_data <- read_csv("data/processed/future_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             stratification_duration = col_double(),
+                                             stratification_onset_yday = col_double(),
+                                             stratified_period_count = col_double(),
+                                             ice_duration = col_double()))
+```
+
+
+```{r}
+sum(historical_data$summerkill == "pos")
+```
+
+ 
+
+
+
+
