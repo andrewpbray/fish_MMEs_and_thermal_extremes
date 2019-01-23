@@ -43,5 +43,8 @@ boxplot
 
 ggsave("depth_boxplot.png", boxplot, width = 8, height = 5)
 
+#
 
+anova_depth = aov( OFFICIAL_MAX_DEPTH_VALUE ~ factor(MME), fig_SI5_data%>%
+                    filter(!is.na(OFFICIAL_MAX_DEPTH_VALUE)) )
 
