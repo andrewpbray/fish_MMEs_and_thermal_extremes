@@ -20,15 +20,19 @@ library(naniar)
 ```{r load data}
 setwd('data/raw')
 MME <-read_csv("fish_kill_data_10_24_2018.csv",
-               col_types = list(WBIC = col_character()))
+               col_types = list(WBIC = col_character(),
+                                Year = col_character()))
 thermal <-read_csv("thermal_metrics.csv")
 NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
-  mutate(WBIC = as.character(WBIC))
+  rename_all(tolower) %>%
+  mutate(wbic = as.character(wbic))
 thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
 
 
 ## Cleaning the raw data
+
+### MME raw data
 
 First we strip out unneeded columns and tidy. There are a few instances of multiple
 MMEs being recorded in the same lake in the same month, we treat as just a single 
@@ -45,8 +49,7 @@ MME <- MME %>%
                 fishkill.inv.seq.no,
                 cause.category.4) %>%
   rename(month = investigation.start.month) %>%
-  mutate(month = tolower(month),
-         dummy = 1) %>% 
+  mutate(dummy = 1) %>% 
   spread(cause.category.4, dummy, fill = 0) %>%
   rename(anthropogenic = `anthropogenic condition`,
          infectious    = `infectious agent`) %>%
@@ -55,12 +58,15 @@ MME <- MME %>%
 ```
 
 For the thermal data, we filter out the data that predates the coverage of the 
-MME data and then, for those lakes with multiple sites, take the average
+MME data and convert to character to aid in later merges.
+
+### Thermal raw data
 
 ```{r}
 thermal <- thermal %>%
   filter(Year >= 2003) %>%
-  rename_all(tolower)
+  rename_all(tolower) %>%
+  mutate(year = as.character(year))
 ```
 
 For now, we process the annual and monthly thermal data separately. This is for
@@ -85,17 +91,17 @@ thermal_annual <- thermal %>%
          cumulative_above_0 = gdd_wtr_0c,
          cumulative_above_5 = gdd_wtr_5c,
          cumulative_above_10 = gdd_wtr_10c) %>%
-  mutate(log_schmidt = log(schmidt))
+  mutate(log_schmidt = log(schmidt + .00001))
 ```
+
+Drop columns that have high missingness.
 
 ```{r}
 # gg_miss_var(thermal_annual)
 thermal_annual <- thermal_annual %>%
   select(-contains("strat"),
          -sthermo_depth_mean)
-
 ```
-
 
 For the monthly data, the month is extracted from the variable name and turned 
 into a datetime. Two additional types of features are made:
@@ -103,7 +109,6 @@ into a datetime. Two additional types of features are made:
 - z-scores for each of the temperature variables, subtracting off the lake x month
 average and dividing by the sd.
 - the temperature data is synthesized into a single PC called `temp`.
-
 
 ```{r}
 thermal_monthly <- thermal %>%
@@ -167,24 +172,35 @@ temp <- thermal_monthly %>%
 
 thermal_monthly <- thermal_monthly %>%
   add_column(temp)
+
+rm(pr)
+rm(temp)
 ```
-
-
 
 ```{r}
 rm(thermal)
 ```
 
+## Merging MME into thermal
 
-## Merging MME with thermal
+There are some lakes where MMEs were recorded for which there is no available
+modeled thermal metric data. Consequently, these cases are dropped in the merge.
 
 ```{r}
 df <- thermal_monthly %>%
   left_join(thermal_annual, by = c("year", "wbic")) %>%
   left_join(MME, by = c("year", "month", "wbic"))
 
+df <- df %>%
+  mutate(summerkill = ifelse(is.na(summerkill), 0, summerkill),
+         winterkill = ifelse(is.na(winterkill), 0, winterkill),
+         anthropogenic = ifelse(is.na(anthropogenic), 0, anthropogenic),
+         infectious = ifelse(is.na(infectious), 0, infectious),
+         unknown = ifelse(is.na(unknown), 0, unknown))
+
 rm(thermal_monthly, thermal_annual)
 ```
+
 
 
 ## Add spatial data
@@ -196,11 +212,10 @@ spatial <- readOGR("lake_shapes", layer = 'model_lakes')
 spatial_df <- as_tibble(spatial) %>%
   bind_cols(as_tibble(coordinates(spatial))) %>%
   mutate(site_id = as.character(site_id)) %>%
-  left_join(NHD_WBIC, by = "site_id") %>%
-  filter(!is.na(WBIC)) %>%
+  inner_join(NHD_WBIC, by = "site_id") %>%
   rename(lat = V2,
          lon = V1) %>%
- dplyr::select(lat, lon, WBIC)
+ dplyr::select(lat, lon, wbic)
 
 names(spatial_df) <- str_to_lower(names(spatial_df))
 
