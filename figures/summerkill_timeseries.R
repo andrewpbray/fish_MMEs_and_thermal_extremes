@@ -30,21 +30,21 @@ future_data$prob <- predictions_1
 
 future_data <- future_data %>%
   group_by(year) %>%
-  summarize(Temp = mean(mean_surf),
-            kills = sum(prob),
-            #lb_kill    = compute_quantile(prob, q = .025, reps = 300),
-            #ub_kill    = compute_quantile(prob, q = .975, reps = 300)
+  summarize(temp    = mean(mean_surf),
+            kills   = sum(prob),
+            lb_kill = compute_quantile(prob, q = .025, reps = 300),
+            ub_kill = compute_quantile(prob, q = .975, reps = 300)
             ) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted,
-         lb_smooth = loess(kills ~ year, .)$fitted,
-         ub_smooth = loess(kills ~ year, .)$fitted)
+         lb_smooth    = loess(kills ~ year, .)$fitted,
+         ub_smooth    = loess(kills ~ year, .)$fitted)
 
 hist_data <- historical_data %>% 
   mutate(summerkill = ifelse(is.na(summerkill), 
                              0, summerkill)) %>%
   group_by(year) %>%
   summarize(kills = sum(summerkill), 
-            Temp = mean(mean_surf)) %>%
+            temp = mean(mean_surf)) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted)
 
 gap_data <- tibble(year = c(2014:2041, 2060:2079))
@@ -60,7 +60,14 @@ ggplot(full_data, aes(x = year)) +
   xlab(NULL) +
   theme_bw()
 
+df <- tibble(year = factor(2011:2035),
+             y = 0,
+             temp = factor(rep(1:5, 5)))
 
+ggplot(df, aes(x = year, y = y, fill = temp)) +
+  geom_tile() +
+  theme_minimal() +
+  theme(axis.ticks = NULL)
 
 
 
