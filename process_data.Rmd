@@ -23,9 +23,9 @@ MME <-read_csv("fish_kill_data_10_24_2018.csv",
                col_types = list(WBIC = col_character(),
                                 Year = col_character()))
 thermal <-read_csv("thermal_metrics.csv")
-NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
-  rename_all(tolower) %>%
-  mutate(wbic = as.character(wbic))
+NHD_WBIC <-read_csv("NHD_WBIC.csv",
+                    col_types = list(WBIC = col_character())) %>%
+  rename_all(tolower)
 thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
 
@@ -66,7 +66,9 @@ MME data and convert to character to aid in later merges.
 thermal <- thermal %>%
   filter(Year >= 2003) %>%
   rename_all(tolower) %>%
-  mutate(year = as.character(year))
+  mutate(year = as.character(year)) %>%
+  select(-contains("strat"),
+         -sthermo_depth_mean)
 ```
 
 For now, we process the annual and monthly thermal data separately. This is for
@@ -92,15 +94,6 @@ thermal_annual <- thermal %>%
          cumulative_above_5 = gdd_wtr_5c,
          cumulative_above_10 = gdd_wtr_10c) %>%
   mutate(log_schmidt = log(schmidt + .00001))
-```
-
-Drop columns that have high missingness.
-
-```{r}
-# gg_miss_var(thermal_annual)
-thermal_annual <- thermal_annual %>%
-  select(-contains("strat"),
-         -sthermo_depth_mean)
 ```
 
 For the monthly data, the month is extracted from the variable name and turned 
@@ -202,22 +195,19 @@ rm(thermal_monthly, thermal_annual)
 ```
 
 
-
 ## Add spatial data
 
 First the spatial covariates of the lakes.
 
 ```{r}
 spatial <- readOGR("lake_shapes", layer = 'model_lakes')
-spatial_df <- as_tibble(spatial) %>%
-  bind_cols(as_tibble(coordinates(spatial))) %>%
-  mutate(site_id = as.character(site_id)) %>%
+spatial_df <- coordinates(spatial) %>%
+  as.data.frame() %>%
+  add_column(site_id = as.character(spatial@data$site_id)) %>%
   inner_join(NHD_WBIC, by = "site_id") %>%
   rename(lat = V2,
          lon = V1) %>%
- dplyr::select(lat, lon, wbic)
-
-names(spatial_df) <- str_to_lower(names(spatial_df))
+  dplyr::select(lat, lon, wbic)
 
 # Represent each lake by just one lat/lon
 spatial_df <- spatial_df %>%
@@ -232,29 +222,28 @@ Merge into existing data.
 
 ```{r}
 df <- df %>%
-  left_join(spatial_df, by = "wbic")
+  inner_join(spatial_df, by = "wbic")
 ```
 
 Next, the 2010 census block covariates from https://www.census.gov/geo/maps-data/data/tiger-data.html
 
 ```{r}
 census <- readOGR("census_data", layer = 'tabblock2010_55_pophu')
-census_df <- as_tibble(census) %>%
-  dplyr::select(POP10) %>%
-  bind_cols(as_tibble(coordinates(census))) %>%
+census_df <- coordinates(census) %>%
+  as.data.frame() %>%
+  add_column(population = census@data$POP10) %>%
   rename(lat = V2,
          lon = V1) %>%
   mutate(lon_round = round(lon, 1),
          lat_round = round(lat, 1)) %>%
   group_by(lon_round, lat_round) %>%
-  summarize(population = sum(POP10)) %>%
- dplyr::select(lon_round, lat_round, population)
+  summarize(population = sum(population)) %>%
+  dplyr::select(lon_round, lat_round, population)
   
 rm(census)
 ```
 
-Correct join using lat and lon, then get summerkill in good shape for reading into models,
-remove lots of NA cols, then drop remaining NA rows.
+Join population data into main df by matching on the rounded lat/lon.
 
 ```{r}
 df <- df %>%
@@ -268,9 +257,11 @@ df <- df %>%
 ## Write out processed historical data
 
 ```{r}
-write_csv(df2, "../processed/historical_data.csv")
+write_csv(df, "../processed/historical_data.csv")
+```
 
-rm(df2)
+```{r}
+rm(df)
 ```
 
 
@@ -284,12 +275,16 @@ Since the cleaning steps are identical to the above, we remove the commentary.
 
 ```{r}
 thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
-  inner_join(NHD_WBIC, by = "site_id") %>%
-  group_by(WBIC, year) %>%
-  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
-  ungroup()
+  inner_join(NHD_WBIC, by = "site_id")
+```
 
-names(thermal) <- str_to_lower(names(thermal))
+```{r}
+thermal <- thermal %>%
+  rename_all(tolower) %>%
+  filter(year >= 2013) %>%
+  mutate(year = as.character(year)) %>%
+  select(-contains("strat"),
+         -sthermo_depth_mean)
 ```
 
 ```{r}
@@ -298,16 +293,30 @@ thermal_annual <- thermal %>%
                 -starts_with('mean_surf_'),
                 -starts_with('mean_bot_'), 
                 -starts_with('max_surf_'), 
-                -starts_with('max_bot_'))
- 
+                -starts_with('max_bot_')) %>%
+  group_by(wbic, year) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  rename(ice_duration = ice_duration_days,
+         schmidt = schmidt_daily_annual_sum,
+         variance_after_ice_30 = coef_var_0.30, 
+         variance_after_ice_60 = coef_var_30.60, 
+         cumulative_above_0 = gdd_wtr_0c,
+         cumulative_above_5 = gdd_wtr_5c,
+         cumulative_above_10 = gdd_wtr_10c) %>%
+  mutate(log_schmidt = log(schmidt + .00001))
+```
+
+```{r}
 thermal_monthly <- thermal %>%
-  dplyr::select(starts_with('mean_surf_'),
+  dplyr::select(starts_with('mean_surf_'),            # tidy the temp data
                 starts_with('mean_bot_'), 
                 starts_with('max_surf_'), 
                 starts_with('max_bot_'),
                 -contains('jas'),
                 year, wbic) %>%
-  gather(key="type", value="temperature", 
+  mutate(uniqueid = 1:n()) %>%
+  gather(key = "type", value = "temperature", 
          starts_with('mean_surf_'),
          starts_with('mean_bot_'), 
          starts_with('max_surf_'), 
@@ -315,33 +324,22 @@ thermal_monthly <- thermal %>%
   separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
   unite(metric, metric, depth) %>%
   spread(metric, temperature) %>%
-  arrange(wbic, year, month)
-
-rm(thermal)
-```
-
-```{r}
-df <- thermal_monthly %>%
-  left_join(thermal_annual, by = c("wbic", "year"))
-
-rm(thermal_monthly, thermal_annual)
-```
-
-```{r}
-df <- df %>%
+  select(-uniqueid) %>%
+  group_by(wbic, year, month) %>%                      # average over sites
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  arrange(wbic, year, month) %>%
   mutate(date = ymd(paste(year, month, "15"))) %>%
   filter(date > "2014-05-01")
-```
-
-```{r}
-df <- df %>%
+  
+thermal_monthly <- thermal_monthly %>%
   group_by(wbic, month) %>%
-  mutate(max_bot_z = scale(max_bot),
+  mutate(max_bot_z = scale(max_bot),                   # make z-score vars
          max_surf_z = scale(max_surf),
          mean_bot_z = scale(mean_bot),
          mean_surf_z = scale(mean_surf)) %>%
   ungroup() %>%
-  mutate(layer_diff = mean_surf - mean_bot,
+  mutate(layer_diff = mean_surf - mean_bot,            # create additional temp/time features
          quadratic_temp = mean_surf^2,
          season = fct_collapse(month,
                                "winter" = "dec",
@@ -355,49 +353,46 @@ df <- df %>%
                                "summer" = "aug",
                                "fall"   = "sep",
                                "fall"   = "oct",
-                               "fall"   = "nov")) %>%
-  rename(ice_duration = ice_duration_days,
-         schmidt = schmidt_daily_annual_sum,
-         variance_after_ice_30 = coef_var_0.30, 
-         variance_after_ice_60 = coef_var_30.60, 
-         cumulative_above_0 = gdd_wtr_0c,
-         cumulative_above_5 = gdd_wtr_5c,
-         cumulative_above_10 = gdd_wtr_10c)
+                               "fall"   = "nov"))
 ```
 
 ```{r}
-df2 <- df %>%
-  left_join(spatial_df, by = "wbic") %>%
-  mutate(lon_round = round(lon, 1),
-         lat_round = round(lat, 1)) %>%
-  left_join(census_df, by = c("lon_round", "lat_round"))
-```
-
-```{r}
-df2 <- df2 %>%
-  dplyr::select(-lon_round, -lat_round) %>%
-  drop_na()
-#sapply(df2, function(x) {sum(is.na(x))})
-```
-
-Add temp_index column via PCA.
-
-```{r}
-pr <- df2 %>%
+pr <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   prcomp(center = TRUE, scale = TRUE)
 
-temp_index <- df2 %>%
+temp <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   as.matrix() %*% pr$rotation[,1]
 
-df2 <- df2 %>%
-  add_column(temp_index)
+thermal_monthly <- thermal_monthly %>%
+  add_column(temp)
+
+rm(pr)
+rm(temp)
 ```
 
 ```{r}
-write_csv(df2, "../processed/future_data.csv")
+rm(thermal)
+```
 
+```{r}
+df <- thermal_monthly %>%
+  left_join(thermal_annual, by = c("year", "wbic")) %>%
+  left_join(spatial_df, by = "wbic") %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  left_join(census_df, by = c("lon_round", "lat_round")) %>%
+  dplyr::select(-lon_round, -lat_round)
+
+rm(thermal_monthly, thermal_annual, spatial_df, census_df)
+```
+
+```{r}
+write_csv(df, "../processed/future_data.csv")
+```
+
+```{r}
 rm(df)
 ```
 
