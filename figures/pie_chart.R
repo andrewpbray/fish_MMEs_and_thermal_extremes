@@ -28,7 +28,7 @@ fig_S1_data <-  fig_S1_data %>%
 
 fig_S1_data$pos = (cumsum(c(0, fig_S1_data$count)) + c(fig_S1_data$count / 2, .01))[1:nrow(fig_S1_data)]
    
-fig_S1_data %>%
+pie <- fig_S1_data %>%
  ggplot(aes(x = "", y = count, fill = cause.category.4))+ 
       geom_bar(width = 1, stat = 'identity') +
       coord_polar("y", start=0) + 
@@ -36,9 +36,9 @@ fig_S1_data %>%
     ylab(NULL) + 
     theme_tufte() +
     theme(axis.text = element_blank(), axis.ticks = element_blank(), legend.title = element_blank())+
-    geom_text(aes( y = pos, x = 1.8, label = percent(count/373)),size=3)+
+    geom_text(aes( y = pos, x = 1.7, label = percent(count/373)),size=3)+
     theme(text = element_text(family = 'sans'))
     
     
-  
+ggsave("pie_chart.png", pie, width = 8, height = 5)
   
