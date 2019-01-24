@@ -14,6 +14,7 @@ library(stringr)
 library(lubridate)
 library(raster)
 library(tidyverse)
+library(naniar)
 ```
 
 ```{r load data}
@@ -83,8 +84,18 @@ thermal_annual <- thermal %>%
          variance_after_ice_60 = coef_var_30.60, 
          cumulative_above_0 = gdd_wtr_0c,
          cumulative_above_5 = gdd_wtr_5c,
-         cumulative_above_10 = gdd_wtr_10c)
+         cumulative_above_10 = gdd_wtr_10c) %>%
+  mutate(log_schmidt = log(schmidt))
 ```
+
+```{r}
+# gg_miss_var(thermal_annual)
+thermal_annual <- thermal_annual %>%
+  select(-contains("strat"),
+         -sthermo_depth_mean)
+
+```
+
 
 For the monthly data, the month is extracted from the variable name and turned 
 into a datetime. Two additional types of features are made:
@@ -119,9 +130,8 @@ thermal_monthly <- thermal %>%
   mutate(date = ymd(paste(year, month, "15"))) %>%
   filter(date > "2003-01-01", date < "2014-05-01")
   
-a <- thermal_monthly %>%
+thermal_monthly <- thermal_monthly %>%
   group_by(wbic, month) %>%
-  count()
   mutate(max_bot_z = scale(max_bot),                   # make z-score vars
          max_surf_z = scale(max_surf),
          mean_bot_z = scale(mean_bot),
@@ -144,33 +154,21 @@ a <- thermal_monthly %>%
                                "fall"   = "nov"))
 ```
 
-```{r}
-df <- df %>%
-  mutate(summerkill = factor(ifelse(is.na(summerkill), 
-                                    0, summerkill)))
-levels(df$summerkill) <- c("neg", "pos")
-df2 <- df %>%
-  dplyr::select(-cause.category, -cause.type,
-                -fishkill.inv.seq.no, -cause.category.4,
-                -winterkill, -infection, -anthropogenic) %>%
-  drop_na()
-```
-
-Add temp_index column via PCA.
+Add `temp` column via PCA to collapse down collinear covariates.
 
 ```{r}
-pr <- df2 %>%
+pr <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   prcomp(center = TRUE, scale = TRUE)
 
-temp_index <- df2 %>%
+temp <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   as.matrix() %*% pr$rotation[,1]
 
-df2 <- df2 %>%
-  add_column(temp_index)
+thermal_monthly <- thermal_monthly %>%
+  add_column(temp)
 ```
-```
+
 
 
 ```{r}
