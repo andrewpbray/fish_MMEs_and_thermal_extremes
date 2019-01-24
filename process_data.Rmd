@@ -18,7 +18,8 @@ library(tidyverse)
 
 ```{r load data}
 setwd('data/raw')
-MME <-read_csv("fish_kill_data_10_24_2018.csv")
+MME <-read_csv("fish_kill_data_10_24_2018.csv",
+               col_types = list(WBIC = col_character()))
 thermal <-read_csv("thermal_metrics.csv")
 NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
   mutate(WBIC = as.character(WBIC))
@@ -26,7 +27,7 @@ thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
 
 
-## Preliminary cleaning
+## Cleaning the raw data
 
 First we strip out unneeded columns and tidy. There are a few instances of multiple
 MMEs being recorded in the same lake in the same month, we treat as just a single 
@@ -34,50 +35,37 @@ MME event.
 
 ```{r}
 MME <- MME %>%
-  filter(Min.Kill.Size!="Excludable") %>%
-  dplyr::select(WBIC,
-                Year,
-                Cause.Category, Cause.Type,
-                Investigation.Start.Month,
-                Fishkill.Inv.Seq.No,
-                Cause.Category.4) %>%
-  rename(month = Investigation.Start.Month) %>%
-  mutate(month = as.character(fct_recode(as.factor(month),
-                                         "jan" = "Jan",
-                                         "feb" = "Feb",
-                                         "mar" = "Mar",
-                                         "apr" = "Apr",
-                                         "may" = "May",
-                                         "jun" = "Jun",
-                                         "jul" = "Jul",
-                                         "aug" = "Aug",
-                                         "sep" = "Sep",
-                                         "oct" = "Oct",
-                                         "nov" = "Nov",
-                                         "dec" = "Dec")),
-         WBIC = as.character(WBIC)) %>%
-  distinct(WBIC, Year, month, .keep_all = TRUE)
-
-names(MME) <- str_to_lower(names(MME))
+  rename_all(tolower) %>%
+  mutate_all(tolower) %>%
+  filter(min.kill.size!="excludable") %>%
+  dplyr::select(wbic,
+                year,
+                investigation.start.month,
+                fishkill.inv.seq.no,
+                cause.category.4) %>%
+  rename(month = investigation.start.month) %>%
+  mutate(month = tolower(month),
+         dummy = 1) %>% 
+  spread(cause.category.4, dummy, fill = 0) %>%
+  rename(anthropogenic = `anthropogenic condition`,
+         infectious    = `infectious agent`) %>%
+  select(-fishkill.inv.seq.no) %>%
+  distinct(wbic, year, month, .keep_all = TRUE)
 ```
 
-For the thermal data, we first only retain distinct `Year` X `WBIC` combinations.
-In general, these were distinct, but there were a few `WBIC` that
-had multiple records for each year due to fact that a single lake can have multiple
-`site_id`s where data is collected. We represent the thermal data for such lakes
-with the average values across all sites.
+For the thermal data, we filter out the data that predates the coverage of the 
+MME data and then, for those lakes with multiple sites, take the average
 
 ```{r}
 thermal <- thermal %>%
-  group_by(WBIC, Year) %>%
-  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
-  ungroup()
-
-names(thermal) <- str_to_lower(names(thermal))
+  filter(Year >= 2003) %>%
+  rename_all(tolower)
 ```
 
 For now, we process the annual and monthly thermal data separately. This is for
-the sake of computational efficiency; they are merged later.
+the sake of computational efficiency; they are merged later. For both the monthly
+and the annual data, we average the data over site_ids (for those lakes with
+multiple sites).
 
 ```{r}
 thermal_annual <- thermal %>%
@@ -85,16 +73,37 @@ thermal_annual <- thermal %>%
                 -starts_with('mean_surf_'),
                 -starts_with('mean_bot_'), 
                 -starts_with('max_surf_'), 
-                -starts_with('max_bot_'))
- 
+                -starts_with('max_bot_')) %>%
+  group_by(wbic, year) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  rename(ice_duration = ice_duration_days,
+         schmidt = schmidt_daily_annual_sum,
+         variance_after_ice_30 = coef_var_0.30, 
+         variance_after_ice_60 = coef_var_30.60, 
+         cumulative_above_0 = gdd_wtr_0c,
+         cumulative_above_5 = gdd_wtr_5c,
+         cumulative_above_10 = gdd_wtr_10c)
+```
+
+For the monthly data, the month is extracted from the variable name and turned 
+into a datetime. Two additional types of features are made:
+
+- z-scores for each of the temperature variables, subtracting off the lake x month
+average and dividing by the sd.
+- the temperature data is synthesized into a single PC called `temp`.
+
+
+```{r}
 thermal_monthly <- thermal %>%
-  dplyr::select(starts_with('mean_surf_'),
+  dplyr::select(starts_with('mean_surf_'),            # tidy the temp data
                 starts_with('mean_bot_'), 
                 starts_with('max_surf_'), 
                 starts_with('max_bot_'),
                 -contains('jas'),
                 year, wbic) %>%
-  gather(key="type", value="temperature", 
+  mutate(uniqueid = 1:n()) %>%
+  gather(key = "type", value = "temperature", 
          starts_with('mean_surf_'),
          starts_with('mean_bot_'), 
          starts_with('max_surf_'), 
@@ -102,49 +111,23 @@ thermal_monthly <- thermal %>%
   separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
   unite(metric, metric, depth) %>%
   spread(metric, temperature) %>%
-  arrange(wbic, year, month)
-
-rm(thermal)
-```
-
-
-## Merging MME with thermal and diagnostics
-
-```{r}
-df <- thermal_monthly %>%
-  left_join(thermal_annual, by = c("year", "wbic")) %>%
-  left_join(MME, by = c("year", "month", "wbic"))
-
-rm(thermal_monthly, thermal_annual)
-```
-
-See section below called "merge matching"" that verifies this.
-
-## Cleaning and creating covariates for modeling
-
-```{r}
-df <- df %>%
+  select(-uniqueid) %>%
+  group_by(wbic, year, month) %>%                      # average over sites
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  arrange(wbic, year, month) %>%
   mutate(date = ymd(paste(year, month, "15"))) %>%
-  filter(date > "2003-01-01", date < "2014-05-01") %>%
-  mutate(mme  = ifelse(!is.na(fishkill.inv.seq.no), 1, 0),
-         summerkill    = ifelse(cause.category.4 == "SUMMERKILL", 1, 0),
-         winterkill    = ifelse(cause.category.4 == "WINTERKILL", 1, 0),
-         infection     = ifelse(cause.category.4 == "INFECTIOUS AGENT", 1, 0),
-         anthropogenic = ifelse(cause.category.4 == "ANTHROPOGENIC CONDITION", 1, 0))
-```
-
-Turn each of the temperature readings into z-scores based on their deviation from 
-that lake's monthly data. Also add additional useful covariates and do some renaming.
-
-```{r}
-df <- df %>%
+  filter(date > "2003-01-01", date < "2014-05-01")
+  
+a <- thermal_monthly %>%
   group_by(wbic, month) %>%
-  mutate(max_bot_z = scale(max_bot),
+  count()
+  mutate(max_bot_z = scale(max_bot),                   # make z-score vars
          max_surf_z = scale(max_surf),
          mean_bot_z = scale(mean_bot),
          mean_surf_z = scale(mean_surf)) %>%
   ungroup() %>%
-  mutate(layer_diff = mean_surf - mean_bot,
+  mutate(layer_diff = mean_surf - mean_bot,            # create additional temp/time features
          quadratic_temp = mean_surf^2,
          season = fct_collapse(month,
                                "winter" = "dec",
@@ -158,14 +141,51 @@ df <- df %>%
                                "summer" = "aug",
                                "fall"   = "sep",
                                "fall"   = "oct",
-                               "fall"   = "nov")) %>%
-  rename(ice_duration = ice_duration_days,
-         schmidt = schmidt_daily_annual_sum,
-         variance_after_ice_30 = coef_var_0.30, 
-         variance_after_ice_60 = coef_var_30.60, 
-         cumulative_above_0 = gdd_wtr_0c,
-         cumulative_above_5 = gdd_wtr_5c,
-         cumulative_above_10 = gdd_wtr_10c)
+                               "fall"   = "nov"))
+```
+
+```{r}
+df <- df %>%
+  mutate(summerkill = factor(ifelse(is.na(summerkill), 
+                                    0, summerkill)))
+levels(df$summerkill) <- c("neg", "pos")
+df2 <- df %>%
+  dplyr::select(-cause.category, -cause.type,
+                -fishkill.inv.seq.no, -cause.category.4,
+                -winterkill, -infection, -anthropogenic) %>%
+  drop_na()
+```
+
+Add temp_index column via PCA.
+
+```{r}
+pr <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+temp_index <- df2 %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+df2 <- df2 %>%
+  add_column(temp_index)
+```
+```
+
+
+```{r}
+rm(thermal)
+```
+
+
+## Merging MME with thermal
+
+```{r}
+df <- thermal_monthly %>%
+  left_join(thermal_annual, by = c("year", "wbic")) %>%
+  left_join(MME, by = c("year", "month", "wbic"))
+
+rm(thermal_monthly, thermal_annual)
 ```
 
 
@@ -229,32 +249,6 @@ df <- df %>%
          lat_round = round(lat, 1)) %>%
   left_join(census_df, by = c("lon_round", "lat_round")) %>%
   dplyr::select(-lon_round, -lat_round)
-
-df <- df %>%
-  mutate(summerkill = factor(ifelse(is.na(summerkill), 
-                                    0, summerkill)))
-levels(df$summerkill) <- c("neg", "pos")
-df2 <- df %>%
-  dplyr::select(-cause.category, -cause.type,
-                -fishkill.inv.seq.no, -cause.category.4,
-                -winterkill, -infection, -anthropogenic) %>%
-  drop_na()
-#sapply(df2, function(x) {sum(is.na(x))})
-```
-
-Add temp_index column via PCA.
-
-```{r}
-pr <- df2 %>%
-  dplyr::select(max_surf, mean_surf, mean_bot) %>%
-  prcomp(center = TRUE, scale = TRUE)
-
-temp_index <- df2 %>%
-  dplyr::select(max_surf, mean_surf, mean_bot) %>%
-  as.matrix() %*% pr$rotation[,1]
-
-df2 <- df2 %>%
-  add_column(temp_index)
 ```
 
 

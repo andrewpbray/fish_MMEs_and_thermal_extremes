@@ -16,8 +16,9 @@ historical_data <- read_csv("historical_data.csv",
 # logistic reg
 
 h <- historical_data %>%
+  mutate(log_schmidt = log(schmidt)) %>%
   dplyr::select(wbic, variance_after_ice_30, variance_after_ice_60,
-         stratified_period_count, schmidt, cumulative_above_10,
+         stratified_period_count, log_schmidt, cumulative_above_10,
          ice_duration, summerkill, population, lon, lat, season,
          temp_index)
 
@@ -32,11 +33,18 @@ h3 <- h %>%
 
 m1 <- glm(summerkill ~ . - wbic - season, 
           data = h2, family = "binomial")
+write_rds(m1, "../models/vanilla_model_1.rds")
 
+m1p5 <- glm(summerkill ~ . - wbic - season, 
+          data = h3, family = "binomial")
 
 # m1 w fixed effect for season
 m2 <- glm(summerkill ~ . -wbic, 
           data = h3, family = "binomial")
+write_rds(m2, "../models/vanilla_model_2.rds")
+
+m2p5 <- glm(summerkill ~ . -wbic, 
+          data = h2, family = "binomial")
 
 
 # m2 w leaps and bounds selection algorithm
@@ -57,16 +65,27 @@ m3 <- bestglm(Xy = xy,
 
 # m2 w random effect for lake
 m4 <- glmer(summerkill ~ . - wbic + (1|wbic),
-             data = h, family = binomial, 
+             data = h2, family = binomial, 
              control = glmerControl(optimizer = "bobyqa"),
              nAGQ = 10)
+
+m4_seasonally_scaledb <- glmer(summerkill ~ . - wbic + (1|wbic),
+            data = h3, family = binomial, 
+            control = glmerControl(optimizer = "bobyqa"),
+            nAGQ = 10)
 
 
 
 # compare models
-stack_models <- bind_rows(tidy(m1), tidy(m2), tidy(m4)) %>%
-  add_column(model_num = rep(c("Model 1", "Model 2", "Model 3"),
-                             c(nrow(tidy(m1)), nrow(tidy(m2)), nrow(tidy(m4)))))
+stack_models <- bind_rows(tidy(m1), 
+                          tidy(m2), 
+                          tidy(m1p5),
+                          tidy(m4_seasonally_scaled)) %>%
+  add_column(model_num = rep(c("Model 1", "Model 2", "Model 3", "Model 4"),
+                             c(nrow(tidy(m1)), 
+                               nrow(tidy(m2)), 
+                               nrow(tidy(m1p5)),
+                               nrow(tidy(m4_seasonally_scaled)))))
 
 stack_models %>%
   filter(term != "(Intercept)", p.value < .05) %>%
