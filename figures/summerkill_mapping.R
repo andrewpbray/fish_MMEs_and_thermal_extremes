@@ -70,7 +70,8 @@ map <- ggmap(Wisconsin_map) +
   geom_path(data = map_data_w, aes(x = long, y = lat, group = group))  +
   theme(text = element_text(family = 'sans'))+
   theme_bw()+
-  facet_grid(.~generation)
+  facet_grid(.~generation) +
+  theme(strip.background = element_rect(colour = "black", fill = "white"))
 map
 
 
