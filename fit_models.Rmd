@@ -6,6 +6,7 @@ output: html_document
 
 ```{r}
 library(tidyverse)
+library(rsample)
 library(caret)
 library(glmnet)
 library(Matrix)
@@ -24,7 +25,8 @@ historical_data <- read_csv("historical_data.csv",
                                              month  = col_factor(NULL),
                                              season = col_factor(NULL),
                                              summerkill = col_factor(NULL),
-                                             ice_duration = col_double()))
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4)
 
 future_data <- read_csv("future_data.csv",
                             col_types = list(wbic = col_factor(NULL),
@@ -33,139 +35,97 @@ future_data <- read_csv("future_data.csv",
                                              ice_duration = col_double()))
 ```
 
-Additional processing to make `caret` happy and faster.
-
 ```{r}
-# historical_data <- historical_data %>%
-#   filter(summerkill == "neg") %>%
-#   sample_frac(.0005) %>%
-#   bind_rows(filter(historical_data, summerkill == "pos"))
-```
-
-```{r}
-m1_var <- c("summerkill", "wbic", "variance_after_ice_30", "variance_after_ice_60",
-            "stratified_period_count", "log_schmidt", "cumulative_above_10",
-            "ice_duration", "population", "lon", "lat", "season",
-            "temp")
 set.seed(998)
 in_training <- createDataPartition(historical_data$summerkill,
                                   p = .75, list = FALSE)
+
 training <- historical_data %>%
-  slice(in_training) %>%
-  select(m2_vars)
-
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(in_training)
 testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(m2_vars)
-```
-
-
-
-## Model 1: Lasso Logistic
-
-First we must create the training and testing partitions. We begin this naively,
-taking an SRS approach instead of a moving-windows time-series approach.
-
-```{r}
-m1_vars <- c("lat", "lon", "schmidt", "variance_after_ice_30",
-         "variance_after_ice_60", "cumulative_above_0",
-         "cumulative_above_5",  "cumulative_above_10",
-         "max_surf", "mean_bot", "max_bot", "mean_surf", 
-         "max_surf_z", "mean_bot_z", "max_bot_z", "mean_surf_z", 
-         "summerkill", "population")
-set.seed(998)
-in_training <- createDataPartition(historical_data$summerkill,
-                                  p = .75, list = FALSE)
-training <- historical_data %>%
-  slice(in_training) %>%
-  select(m1_vars)
-
-testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(m1_vars)
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(-in_training)
 ```
 
 In order to compare coefficients, we center and scale the predictors.
 
 ```{r}
 pre_proc_values <- preProcess(training, method = c("center", "scale"))
-train_transformed <- predict(pre_proc_values, training)
-test_transformed  <- predict(pre_proc_values, testing)
+training <- predict(pre_proc_values, training)
+testing  <- predict(pre_proc_values, testing)
 ```
 
 
-Next we fit LASSO models with many difference lambdas, utilizing a 5-fold CV
+## Model 1: Lasso Logistic
+
+```{r}
+f1 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + ice_duration + population + lon + lat + season + temp
+```
+
+We first fit LASSO models with many difference lambdas, utilizing a 5-fold CV
 scheme, repeated once, on the training data.
 
 ```{r}
 fitControl <- trainControl(method = "repeatedcv",
                            number = 5,
-                           repeats = 5,
+                           repeats = 2,
                            summaryFunction = mnLogLoss,
                            classProbs = TRUE)
 
 library(doParallel)
-cl <- makePSOCKcluster(8)
+cl <- makePSOCKcluster(6)
 registerDoParallel(cl)
 
 par_grid <-  expand.grid(alpha = 1,
-                        lambda = seq(9e-8, 3.5e-7, length.out = 6))
+                        lambda = seq(1.8e-6, 3.5e-6, 
+                                     length.out = 4))
 
 
 set.seed(825)
-lasso_fit_1 <- train(summerkill ~ ., 
-                     data = train_transformed, 
+lasso_fit_1 <- train(f, 
+                     data = training, 
                      method = "glmnet", 
                      metric = "mnLogLoss",
                      tuneGrid = par_grid,
                      trControl = fitControl)
+stopCluster(cl)
+write_rds(lasso_fit_1, "../models/lasso_fit_1.rds")
+
 ggplot(lasso_fit_1)
-
-stopCluster(cl)
-
-write_rds(lasso_fit_1, "../models/log_loss_opt_5_repeats.rds")
-
-lasso_fit_1b <- train(summerkill ~ ., data = training, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
-stopCluster(cl)
-write_rds(lasso_fit_1, "../lasso_fit_1.rds")
-write_rds(lasso_fit_1b, "../lasso_fit_1b.rds")
+ggplot(varImp(lasso_fit_1))
 ```
 
 
-## Model 2: Lasso logistic with season fixed effects
+## Model 2: Ridge logistic with full covariates
 
 ```{r}
-m2_vars <- c(m1_vars, "season")
-
-training <- historical_data %>%
-  slice(in_training) %>%
-  select(m2_vars)
-
-testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(m2_vars)
+f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + ice_duration + population + lon + lat + season + temp +
+  max_bot + max_surf + mean_bot + mean_surf + max_bot_z + max_surf_z + mean_bot_z +
+  mean_surf_z + layer_diff + quadratic_temp + peak_temp + cumulative_above_0 +
+  cumulative_above_5
 ```
 
 ```{r}
-pre_proc_values <- preProcess(training, method = c("center", "scale"))
-train_transformed <- predict(pre_proc_values, training)
-test_transformed  <- predict(pre_proc_values, testing)
-```
-
-```{r}
-cl <- makePSOCKcluster(6)
+par_grid <-  expand.grid(alpha = 0,
+                        lambda = seq(1.8e-8, 3.5e-6, 
+                                     length.out = 8))
+cl <- makePSOCKcluster(8)
 registerDoParallel(cl)
 
 set.seed(825)
-lasso_fit_2 <- train(summerkill ~ ., data = training, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
+ridge_fit_2 <- train(f2, 
+                     data = training, 
+                     method = "glmnet", 
+                     trControl = fitControl)
 stopCluster(cl)
-write_rds(lasso_fit_2, "../lasso_fit_2.rds")
+write_rds(ridge_fit_2, "../models/ridge_fit_2.rds")
 ```
 
 
