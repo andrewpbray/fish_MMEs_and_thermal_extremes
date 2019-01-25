@@ -22,7 +22,15 @@ setwd("data/processed/")
 historical_data <- read_csv("historical_data.csv",
                             col_types = list(wbic = col_factor(NULL),
                                              month  = col_factor(NULL),
-                                             season = col_factor(NULL)))
+                                             season = col_factor(NULL),
+                                             summerkill = col_factor(NULL),
+                                             ice_duration = col_double()))
+
+future_data <- read_csv("future_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             ice_duration = col_double()))
 ```
 
 Additional processing to make `caret` happy and faster.
@@ -35,10 +43,10 @@ Additional processing to make `caret` happy and faster.
 ```
 
 ```{r}
-m2_var <- c("wbic", "variance_after_ice_30", "variance_after_ice_60",
-            "stratified_period_count", "schmidt", "cumulative_above_10",
-            "ice_duration", "summerkill", "population", "lon", "lat", "season",
-            "synth_temp")
+m1_var <- c("summerkill", "wbic", "variance_after_ice_30", "variance_after_ice_60",
+            "stratified_period_count", "log_schmidt", "cumulative_above_10",
+            "ice_duration", "population", "lon", "lat", "season",
+            "temp")
 set.seed(998)
 in_training <- createDataPartition(historical_data$summerkill,
                                   p = .75, list = FALSE)
