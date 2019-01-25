@@ -39,7 +39,7 @@ Wisconsin_map <- get_map(bbox, zoom = 7, maptype = 'toner-lines')
 
 
 
-future_predictions = future_data %>% bind_cols(predictions_1) %>% mutate(event = `1`)
+future_predictions = future_data %>% bind_cols(predictions_1) %>% mutate(event = pos)
 
 fig3_data = bind_rows(historical_data, future_predictions) %>%
   mutate(generation = ifelse(year > 2070, 'c', 'b')) %>%
@@ -70,7 +70,8 @@ map <- ggmap(Wisconsin_map) +
   geom_path(data = map_data_w, aes(x = long, y = lat, group = group))  +
   theme(text = element_text(family = 'sans'))+
   theme_bw()+
-  facet_grid(.~generation)
+  facet_grid(.~generation) + 
+  theme(strip.background = element_blank())
 map
 
 
