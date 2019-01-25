@@ -123,28 +123,28 @@ write_rds(lasso_fit_1, "../models/lasso_f1_logloss.rds")
 ```{r}
 fitControl <- trainControl(method = "repeatedcv",
                            number = 5,
-                           repeats = 2,
+                           repeats = 1,
                            summaryFunction = mnLogLoss,
-                           classProbs = TRUE)
+                           classProbs = TRUE,
+                           sampling = "down")
 
 library(doParallel)
-cl <- makePSOCKcluster(6)
+cl <- makePSOCKcluster(3)
 registerDoParallel(cl)
 
-# par_grid <-  expand.grid(alpha = 1,
-#                         lambda = seq(1.8e-6, 3.5e-6, 
-#                                      length.out = 4))
-
+par_grid <-  expand.grid(alpha = 1,
+                        lambda = 10^seq(-3, -1, length = 10))
 
 set.seed(825)
-lasso_fit_1 <- train(f1, 
-                     data = training, 
-                     method = "glmnet", 
-                     metric = "mnLogLoss",
-                     #tuneGrid = par_grid,
-                     trControl = fitControl)
+lasso_f1_logloss_downsampled <- train(f1, 
+                                      data = training, 
+                                      method = "glmnet", 
+                                      metric = "mnLogLoss",
+                                      tuneGrid = par_grid,
+                                      trControl = fitControl)
 stopCluster(cl)
 write_rds(lasso_fit_1, "../models/lasso_f1_logloss_downsampled.rds")
+ggplot(lasso_f1_logloss_downsampled)
 ```
 
 
