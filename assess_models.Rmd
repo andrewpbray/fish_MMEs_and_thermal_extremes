@@ -1,0 +1,78 @@
+---
+title: "Process Models"
+author: "Aaron Till and Andrew Bray"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(Matrix)
+library(e1071)
+library(broom)
+```
+
+## Load data and model
+
+```{r}
+setwd("data")
+historical_data <- read_csv("processed/historical_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             summerkill = col_factor(NULL),
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4)
+
+future_data <- read_csv("processed/future_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             ice_duration = col_double()))
+```
+
+```{r}
+set.seed(998)
+in_training <- createDataPartition(historical_data$summerkill,
+                                  p = .75, list = FALSE)
+training <- historical_data %>%
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(in_training)
+testing  <- historical_data %>%
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(-in_training)
+
+pre_proc_values <- preProcess(training, method = c("center", "scale"))
+training <- predict(pre_proc_values, training)
+testing  <- predict(pre_proc_values, testing)
+```
+
+```{r}
+lasso_f1_logloss <- read_rds("models/lasso_f1_logloss.rds")
+lasso_f1_logloss_downsampled <- read_rds("models/lasso_f1_logloss_downsampled.rds")
+```
+
+## 
+
+```{r}
+ggplot(lasso_f1_logloss)
+ggplot(lasso_f1_logloss_downsampled)
+
+ggplot(varImp(lasso_f1_logloss))
+ggplot(varImp(lasso_f1_logloss_downsampled))
+
+p1 <- predict(lasso_f1_logloss, historical_data, type = "prob")
+p2 <- predict(lasso_f1_logloss_downsampled, historical_data, type = "prob")
+
+a <- historical_data %>%
+  select(summerkill) %>%
+  mutate(truth = summerkill) %>%
+  add_column(estimate = p1$neg) %>%
+  roc_curve()
+```
+
