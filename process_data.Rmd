@@ -42,15 +42,16 @@ MME event.
 MME <- MME %>%
   rename_all(tolower) %>%
   mutate_all(tolower) %>%
-  filter(min.kill.size!="excludable") %>%
+  dplyr::filter(min.kill.size!="excludable") %>%
   dplyr::select(wbic,
                 year,
                 investigation.start.month,
                 fishkill.inv.seq.no,
                 cause.category.4) %>%
   rename(month = investigation.start.month) %>%
-  mutate(dummy = 1) %>% 
-  spread(cause.category.4, dummy, fill = 0) %>%
+  mutate(dummy = 1,
+         cause.categories = cause.category.4) %>% 
+  spread(cause.categories, dummy, fill = 0) %>%
   rename(anthropogenic = `anthropogenic condition`,
          infectious    = `infectious agent`) %>%
   select(-fishkill.inv.seq.no) %>%
