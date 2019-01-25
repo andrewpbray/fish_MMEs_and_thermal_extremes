@@ -73,7 +73,8 @@ p_timeseries <- ggplot(full_data, aes(x = year)) +
 # Temperature plot
 p_temp <- full_data %>%
   ggplot(aes(x = year, y = 1, fill = temp)) +
-  geom_tile() +
+  geom_tile() + 
+  scale_fill_distiller(type = "seq", palette = "Reds", direction = 1) +
   theme_void()
 
 library(patchwork)
