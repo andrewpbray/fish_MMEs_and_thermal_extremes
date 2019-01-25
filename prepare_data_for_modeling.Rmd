@@ -13,18 +13,12 @@ historical_data <- read_csv("data/processed/historical_data.csv",
                                              month  = col_factor(NULL),
                                              season = col_factor(NULL),
                                              summerkill = col_factor(NULL),
-                                             stratification_duration = col_double(),
-                                             stratification_onset_yday = col_double(),
-                                             stratified_period_count = col_double(),
                                              ice_duration = col_double()))
 
 future_data <- read_csv("data/processed/future_data.csv",
                             col_types = list(wbic = col_factor(NULL),
                                              month  = col_factor(NULL),
                                              season = col_factor(NULL),
-                                             stratification_duration = col_double(),
-                                             stratification_onset_yday = col_double(),
-                                             stratified_period_count = col_double(),
                                              ice_duration = col_double()))
 ```
 
