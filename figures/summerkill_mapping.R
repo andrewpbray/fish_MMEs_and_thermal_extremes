@@ -17,9 +17,9 @@ ogrListLayers(dsn2)
 spatial_w <- readOGR(dsn2, layer = 'wisco_only')
 
 
-historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data <- read_csv('../processed-data/historical_data.csv')
 
-future_data = read_csv('../processed-data/future_data.csv')
+future_data <- read_csv('../processed-data/future_data.csv')
 
 
 lasso_fit_1 <- read_rds("../models/lasso_fit_1")
