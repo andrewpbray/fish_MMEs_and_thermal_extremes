@@ -14,6 +14,7 @@ library(e1071)
 library(pROC)
 library(PRROC) 
 library(glmnetUtils)
+library(lme4)
 ```
 
 ## Prepare data
@@ -108,14 +109,15 @@ par_grid <-  expand.grid(alpha = 1,
 
 
 set.seed(825)
-lasso_fit_1 <- train(f1, 
+lasso_f1_logloss <- train(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + population + lon + lat + season + temp, 
                      data = training, 
                      method = "glmnet", 
                      metric = "mnLogLoss",
-                     tuneGrid = par_grid,
+                     #tuneGrid = par_grid,
                      trControl = fitControl)
 stopCluster(cl)
-write_rds(lasso_fit_1, "../models/lasso_f1_logloss.rds")
+write_rds(lasso_f1_logloss, "../models/lasso_f1_logloss.rds")
 ```
 
 ### f1, logloss, with downsampling
@@ -123,28 +125,30 @@ write_rds(lasso_fit_1, "../models/lasso_f1_logloss.rds")
 ```{r}
 fitControl <- trainControl(method = "repeatedcv",
                            number = 5,
-                           repeats = 1,
+                           repeats = 3,
                            summaryFunction = mnLogLoss,
                            classProbs = TRUE,
                            sampling = "down")
 
 library(doParallel)
-cl <- makePSOCKcluster(3)
+cl <- makePSOCKcluster(4)
 registerDoParallel(cl)
 
 par_grid <-  expand.grid(alpha = 1,
                         lambda = 10^seq(-3, -1, length = 10))
 
 set.seed(825)
-lasso_f1_logloss_downsampled <- train(f1, 
+lasso_f1_logloss_downsampled <- train(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + population + lon + lat + season + temp, 
                                       data = training, 
                                       method = "glmnet", 
                                       metric = "mnLogLoss",
                                       tuneGrid = par_grid,
                                       trControl = fitControl)
 stopCluster(cl)
-write_rds(lasso_fit_1, "../models/lasso_f1_logloss_downsampled.rds")
+write_rds(lasso_f1_logloss_downsampled, "../models/lasso_f1_logloss_downsampled.rds")
 ggplot(lasso_f1_logloss_downsampled)
+ggplot(varImp(lasso_f1_logloss_downsampled))
 ```
 
 
@@ -166,5 +170,31 @@ ridge_fit_2 <- train(f2,
                      trControl = fitControl)
 stopCluster(cl)
 write_rds(ridge_fit_2, "../models/ridge_f1_logloss.rds")
+```
+
+
+## Random Effects Logistic
+
+```{r}
+f1_re <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + ice_duration + population + lon + lat + season + temp + (1 | wbic)
+```
+
+```{r}
+re_f1 <- glmer(f1_re,
+               data = training, 
+               family = binomial, 
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+
+library(optimx)
+m1 <- lmer(f1_re, 
+          data = training,
+          family = binomial,
+          REML = FALSE, 
+          control = glmerControl(optimizer ='optimx',
+                           optCtrl=list(method='L-BFGS-B')))
+
+write_rds(re_f1, "../models/re_f1.rds")
 ```
 
