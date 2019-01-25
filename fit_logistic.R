@@ -9,14 +9,17 @@ historical_data <- read_csv("historical_data.csv",
                                              month  = col_factor(NULL),
                                              season = col_factor(NULL),
                                              summerkill = col_factor(NULL),
-                                             stratification_duration = col_integer(),
-                                             stratification_onset_yday = col_integer(),
-                                             stratified_period_count = col_integer()))
+                                             ice_duration = col_double()))
+
+future_data <- read_csv("future_data.csv",
+                            col_types = list(wbic = col_factor(NULL),
+                                             month  = col_factor(NULL),
+                                             season = col_factor(NULL),
+                                             ice_duration = col_double()))
 
 # logistic reg
 
 h <- historical_data %>%
-  mutate(log_schmidt = log(schmidt)) %>%
   dplyr::select(wbic, variance_after_ice_30, variance_after_ice_60,
          stratified_period_count, log_schmidt, cumulative_above_10,
          ice_duration, summerkill, population, lon, lat, season,
@@ -98,3 +101,16 @@ stack_models %>%
   ) +
   theme_bw()
 
+
+# simple model for fig 2
+
+h <- historical_data %>%
+  dplyr::select(summerkill, wbic, variance_after_ice_30, variance_after_ice_60,
+                log_schmidt, cumulative_above_10, population, lon, lat, season, temp)
+
+h2 <- h %>%
+  mutate_if(is.numeric, scale)
+
+m1 <- glm(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+            cumulative_above_10 + population + lon + lat + season + temp, 
+          data = h2, family = "binomial")

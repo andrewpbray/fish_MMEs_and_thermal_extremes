@@ -18,8 +18,10 @@ spatial_w <- readOGR(dsn2, layer = 'wisco_only')
 
 
 historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data <- read_csv('../processed-data/historical_data.csv')
 
 future_data = read_csv('../processed-data/future_data.csv')
+future_data <- read_csv('../processed-data/future_data.csv')
 
 
 lasso_fit_1 <- read_rds("../models/lasso_fit_1")
@@ -70,8 +72,13 @@ map <- ggmap(Wisconsin_map) +
   geom_path(data = map_data_w, aes(x = long, y = lat, group = group))  +
   theme(text = element_text(family = 'sans'))+
   theme_bw()+
+<<<<<<< HEAD
   facet_grid(.~generation) + 
   theme(strip.background = element_blank())
+=======
+  facet_grid(.~generation) +
+  theme(strip.background = element_rect(colour = "black", fill = "white"))
+>>>>>>> 7b2083ace17b76d44002f5744a8e933d1d76f86c
 map
 
 

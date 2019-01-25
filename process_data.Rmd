@@ -14,20 +14,25 @@ library(stringr)
 library(lubridate)
 library(raster)
 library(tidyverse)
+library(naniar)
 ```
 
 ```{r load data}
 setwd('data/raw')
 MME <-read_csv("fish_kill_data_10_24_2018.csv",
-               col_types = list(WBIC = col_character()))
+               col_types = list(WBIC = col_character(),
+                                Year = col_character()))
 thermal <-read_csv("thermal_metrics.csv")
-NHD_WBIC <-read_csv("NHD_WBIC.csv") %>%
-  mutate(WBIC = as.character(WBIC))
+NHD_WBIC <-read_csv("NHD_WBIC.csv",
+                    col_types = list(WBIC = col_character())) %>%
+  rename_all(tolower)
 thermal <- inner_join(thermal, NHD_WBIC, by = "site_id")
 ```
 
 
 ## Cleaning the raw data
+
+### MME raw data
 
 First we strip out unneeded columns and tidy. There are a few instances of multiple
 MMEs being recorded in the same lake in the same month, we treat as just a single 
@@ -44,8 +49,7 @@ MME <- MME %>%
                 fishkill.inv.seq.no,
                 cause.category.4) %>%
   rename(month = investigation.start.month) %>%
-  mutate(month = tolower(month),
-         dummy = 1) %>% 
+  mutate(dummy = 1) %>% 
   spread(cause.category.4, dummy, fill = 0) %>%
   rename(anthropogenic = `anthropogenic condition`,
          infectious    = `infectious agent`) %>%
@@ -54,12 +58,17 @@ MME <- MME %>%
 ```
 
 For the thermal data, we filter out the data that predates the coverage of the 
-MME data and then, for those lakes with multiple sites, take the average
+MME data and convert to character to aid in later merges.
+
+### Thermal raw data
 
 ```{r}
 thermal <- thermal %>%
   filter(Year >= 2003) %>%
-  rename_all(tolower)
+  rename_all(tolower) %>%
+  mutate(year = as.character(year)) %>%
+  select(-contains("strat"),
+         -sthermo_depth_mean)
 ```
 
 For now, we process the annual and monthly thermal data separately. This is for
@@ -83,7 +92,8 @@ thermal_annual <- thermal %>%
          variance_after_ice_60 = coef_var_30.60, 
          cumulative_above_0 = gdd_wtr_0c,
          cumulative_above_5 = gdd_wtr_5c,
-         cumulative_above_10 = gdd_wtr_10c)
+         cumulative_above_10 = gdd_wtr_10c) %>%
+  mutate(log_schmidt = log(schmidt + .00001))
 ```
 
 For the monthly data, the month is extracted from the variable name and turned 
@@ -92,7 +102,6 @@ into a datetime. Two additional types of features are made:
 - z-scores for each of the temperature variables, subtracting off the lake x month
 average and dividing by the sd.
 - the temperature data is synthesized into a single PC called `temp`.
-
 
 ```{r}
 thermal_monthly <- thermal %>%
@@ -119,9 +128,212 @@ thermal_monthly <- thermal %>%
   mutate(date = ymd(paste(year, month, "15"))) %>%
   filter(date > "2003-01-01", date < "2014-05-01")
   
-a <- thermal_monthly %>%
+thermal_monthly <- thermal_monthly %>%
   group_by(wbic, month) %>%
-  count()
+  mutate(max_bot_z = scale(max_bot),                   # make z-score vars
+         max_surf_z = scale(max_surf),
+         mean_bot_z = scale(mean_bot),
+         mean_surf_z = scale(mean_surf)) %>%
+  ungroup() %>%
+  mutate(layer_diff = mean_surf - mean_bot,            # create additional temp/time features
+         quadratic_temp = mean_surf^2,
+         season = fct_collapse(month,
+                               "winter" = "dec",
+                               "winter" = "jan",
+                               "winter" = "feb",
+                               "spring" = "mar",
+                               "spring" = "apr",
+                               "spring" = "may",
+                               "summer" = "jun",
+                               "summer" = "jul",
+                               "summer" = "aug",
+                               "fall"   = "sep",
+                               "fall"   = "oct",
+                               "fall"   = "nov"))
+```
+
+Add `temp` column via PCA to collapse down collinear covariates.
+
+```{r}
+pr <- thermal_monthly %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  prcomp(center = TRUE, scale = TRUE)
+
+temp <- thermal_monthly %>%
+  dplyr::select(max_surf, mean_surf, mean_bot) %>%
+  as.matrix() %*% pr$rotation[,1]
+
+thermal_monthly <- thermal_monthly %>%
+  add_column(temp)
+
+rm(pr)
+rm(temp)
+```
+
+```{r}
+rm(thermal)
+```
+
+## Merging MME into thermal
+
+There are some lakes where MMEs were recorded for which there is no available
+modeled thermal metric data. Consequently, these cases are dropped in the merge.
+
+```{r}
+df <- thermal_monthly %>%
+  left_join(thermal_annual, by = c("year", "wbic")) %>%
+  left_join(MME, by = c("year", "month", "wbic"))
+
+df <- df %>%
+  mutate(summerkill = ifelse(is.na(summerkill), 0, summerkill),
+         winterkill = ifelse(is.na(winterkill), 0, winterkill),
+         anthropogenic = ifelse(is.na(anthropogenic), 0, anthropogenic),
+         infectious = ifelse(is.na(infectious), 0, infectious),
+         unknown = ifelse(is.na(unknown), 0, unknown))
+
+rm(thermal_monthly, thermal_annual)
+```
+
+
+## Add spatial data
+
+First the spatial covariates of the lakes.
+
+```{r}
+spatial <- readOGR("lake_shapes", layer = 'model_lakes')
+spatial_df <- coordinates(spatial) %>%
+  as.data.frame() %>%
+  add_column(site_id = as.character(spatial@data$site_id)) %>%
+  inner_join(NHD_WBIC, by = "site_id") %>%
+  rename(lat = V2,
+         lon = V1) %>%
+  dplyr::select(lat, lon, wbic)
+
+# Represent each lake by just one lat/lon
+spatial_df <- spatial_df %>%
+  group_by(wbic) %>%
+  summarize(lon = mean(lon),
+            lat = mean(lat))
+
+rm(spatial)
+```
+
+Merge into existing data.
+
+```{r}
+df <- df %>%
+  inner_join(spatial_df, by = "wbic")
+```
+
+Next, the 2010 census block covariates from https://www.census.gov/geo/maps-data/data/tiger-data.html
+
+```{r}
+census <- readOGR("census_data", layer = 'tabblock2010_55_pophu')
+census_df <- coordinates(census) %>%
+  as.data.frame() %>%
+  add_column(population = census@data$POP10) %>%
+  rename(lat = V2,
+         lon = V1) %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  group_by(lon_round, lat_round) %>%
+  summarize(population = sum(population)) %>%
+  dplyr::select(lon_round, lat_round, population)
+  
+rm(census)
+```
+
+Join population data into main df by matching on the rounded lat/lon.
+
+```{r}
+df <- df %>%
+  mutate(lon_round = round(lon, 1),
+         lat_round = round(lat, 1)) %>%
+  left_join(census_df, by = c("lon_round", "lat_round")) %>%
+  dplyr::select(-lon_round, -lat_round)
+```
+
+
+## Write out processed historical data
+
+```{r}
+write_csv(df, "../processed/historical_data.csv")
+```
+
+```{r}
+rm(df)
+```
+
+
+
+
+# Part II: Future Data
+
+To make a dataset containing the information needed to predict MMEs into the future, we read in a new thermals data set and process it in the same way that we did the historical data. We then merge in the same spatial and census data since it is lake-specific.
+
+Since the cleaning steps are identical to the above, we remove the commentary.
+
+```{r}
+thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
+  inner_join(NHD_WBIC, by = "site_id")
+```
+
+```{r}
+thermal <- thermal %>%
+  rename_all(tolower) %>%
+  filter(year >= 2013) %>%
+  mutate(year = as.character(year)) %>%
+  select(-contains("strat"),
+         -sthermo_depth_mean)
+```
+
+```{r}
+thermal_annual <- thermal %>%
+  dplyr::select(-contains('jas'),
+                -starts_with('mean_surf_'),
+                -starts_with('mean_bot_'), 
+                -starts_with('max_surf_'), 
+                -starts_with('max_bot_')) %>%
+  group_by(wbic, year) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  rename(ice_duration = ice_duration_days,
+         schmidt = schmidt_daily_annual_sum,
+         variance_after_ice_30 = coef_var_0.30, 
+         variance_after_ice_60 = coef_var_30.60, 
+         cumulative_above_0 = gdd_wtr_0c,
+         cumulative_above_5 = gdd_wtr_5c,
+         cumulative_above_10 = gdd_wtr_10c) %>%
+  mutate(log_schmidt = log(schmidt + .00001))
+```
+
+```{r}
+thermal_monthly <- thermal %>%
+  dplyr::select(starts_with('mean_surf_'),            # tidy the temp data
+                starts_with('mean_bot_'), 
+                starts_with('max_surf_'), 
+                starts_with('max_bot_'),
+                -contains('jas'),
+                year, wbic) %>%
+  mutate(uniqueid = 1:n()) %>%
+  gather(key = "type", value = "temperature", 
+         starts_with('mean_surf_'),
+         starts_with('mean_bot_'), 
+         starts_with('max_surf_'), 
+         starts_with('max_bot_')) %>%
+  separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
+  unite(metric, metric, depth) %>%
+  spread(metric, temperature) %>%
+  select(-uniqueid) %>%
+  group_by(wbic, year, month) %>%                      # average over sites
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  ungroup() %>%
+  arrange(wbic, year, month) %>%
+  mutate(date = ymd(paste(year, month, "15"))) %>%
+  filter(date > "2014-05-01")
+  
+thermal_monthly <- thermal_monthly %>%
+  group_by(wbic, month) %>%
   mutate(max_bot_z = scale(max_bot),                   # make z-score vars
          max_surf_z = scale(max_surf),
          mean_bot_z = scale(mean_bot),
@@ -145,246 +357,42 @@ a <- thermal_monthly %>%
 ```
 
 ```{r}
-df <- df %>%
-  mutate(summerkill = factor(ifelse(is.na(summerkill), 
-                                    0, summerkill)))
-levels(df$summerkill) <- c("neg", "pos")
-df2 <- df %>%
-  dplyr::select(-cause.category, -cause.type,
-                -fishkill.inv.seq.no, -cause.category.4,
-                -winterkill, -infection, -anthropogenic) %>%
-  drop_na()
-```
-
-Add temp_index column via PCA.
-
-```{r}
-pr <- df2 %>%
+pr <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   prcomp(center = TRUE, scale = TRUE)
 
-temp_index <- df2 %>%
+temp <- thermal_monthly %>%
   dplyr::select(max_surf, mean_surf, mean_bot) %>%
   as.matrix() %*% pr$rotation[,1]
 
-df2 <- df2 %>%
-  add_column(temp_index)
-```
-```
+thermal_monthly <- thermal_monthly %>%
+  add_column(temp)
 
+rm(pr)
+rm(temp)
+```
 
 ```{r}
 rm(thermal)
 ```
-
-
-## Merging MME with thermal
 
 ```{r}
 df <- thermal_monthly %>%
   left_join(thermal_annual, by = c("year", "wbic")) %>%
-  left_join(MME, by = c("year", "month", "wbic"))
-
-rm(thermal_monthly, thermal_annual)
-```
-
-
-## Add spatial data
-
-First the spatial covariates of the lakes.
-
-```{r}
-spatial <- readOGR("lake_shapes", layer = 'model_lakes')
-spatial_df <- as_tibble(spatial) %>%
-  bind_cols(as_tibble(coordinates(spatial))) %>%
-  mutate(site_id = as.character(site_id)) %>%
-  left_join(NHD_WBIC, by = "site_id") %>%
-  filter(!is.na(WBIC)) %>%
-  rename(lat = V2,
-         lon = V1) %>%
- dplyr::select(lat, lon, WBIC)
-
-names(spatial_df) <- str_to_lower(names(spatial_df))
-
-# Represent each lake by just one lat/lon
-spatial_df <- spatial_df %>%
-  group_by(wbic) %>%
-  summarize(lon = mean(lon),
-            lat = mean(lat))
-
-rm(spatial)
-```
-
-Merge into existing data.
-
-```{r}
-df <- df %>%
-  left_join(spatial_df, by = "wbic")
-```
-
-Next, the 2010 census block covariates from https://www.census.gov/geo/maps-data/data/tiger-data.html
-
-```{r}
-census <- readOGR("census_data", layer = 'tabblock2010_55_pophu')
-census_df <- as_tibble(census) %>%
-  dplyr::select(POP10) %>%
-  bind_cols(as_tibble(coordinates(census))) %>%
-  rename(lat = V2,
-         lon = V1) %>%
-  mutate(lon_round = round(lon, 1),
-         lat_round = round(lat, 1)) %>%
-  group_by(lon_round, lat_round) %>%
-  summarize(population = sum(POP10)) %>%
- dplyr::select(lon_round, lat_round, population)
-  
-rm(census)
-```
-
-Correct join using lat and lon, then get summerkill in good shape for reading into models,
-remove lots of NA cols, then drop remaining NA rows.
-
-```{r}
-df <- df %>%
+  left_join(spatial_df, by = "wbic") %>%
   mutate(lon_round = round(lon, 1),
          lat_round = round(lat, 1)) %>%
   left_join(census_df, by = c("lon_round", "lat_round")) %>%
   dplyr::select(-lon_round, -lat_round)
-```
 
-
-## Write out processed historical data
-
-```{r}
-write_csv(df2, "../processed/historical_data.csv")
-
-rm(df2)
-```
-
-
-
-
-# Part II: Future Data
-
-To make a dataset containing the information needed to predict MMEs into the future, we read in a new thermals data set and process it in the same way that we did the historical data. We then merge in the same spatial and census data since it is lake-specific.
-
-Since the cleaning steps are identical to the above, we remove the commentary.
-
-```{r}
-thermal <- read_tsv('ACCESS_thermal_metrics.tsv') %>%
-  inner_join(NHD_WBIC, by = "site_id") %>%
-  group_by(WBIC, year) %>%
-  summarise_if(is.numeric, mean, na.rm = TRUE) %>%
-  ungroup()
-
-names(thermal) <- str_to_lower(names(thermal))
+rm(thermal_monthly, thermal_annual, spatial_df, census_df)
 ```
 
 ```{r}
-thermal_annual <- thermal %>%
-  dplyr::select(-contains('jas'),
-                -starts_with('mean_surf_'),
-                -starts_with('mean_bot_'), 
-                -starts_with('max_surf_'), 
-                -starts_with('max_bot_'))
- 
-thermal_monthly <- thermal %>%
-  dplyr::select(starts_with('mean_surf_'),
-                starts_with('mean_bot_'), 
-                starts_with('max_surf_'), 
-                starts_with('max_bot_'),
-                -contains('jas'),
-                year, wbic) %>%
-  gather(key="type", value="temperature", 
-         starts_with('mean_surf_'),
-         starts_with('mean_bot_'), 
-         starts_with('max_surf_'), 
-         starts_with('max_bot_')) %>%
-  separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
-  unite(metric, metric, depth) %>%
-  spread(metric, temperature) %>%
-  arrange(wbic, year, month)
-
-rm(thermal)
+write_csv(df, "../processed/future_data.csv")
 ```
 
 ```{r}
-df <- thermal_monthly %>%
-  left_join(thermal_annual, by = c("wbic", "year"))
-
-rm(thermal_monthly, thermal_annual)
-```
-
-```{r}
-df <- df %>%
-  mutate(date = ymd(paste(year, month, "15"))) %>%
-  filter(date > "2014-05-01")
-```
-
-```{r}
-df <- df %>%
-  group_by(wbic, month) %>%
-  mutate(max_bot_z = scale(max_bot),
-         max_surf_z = scale(max_surf),
-         mean_bot_z = scale(mean_bot),
-         mean_surf_z = scale(mean_surf)) %>%
-  ungroup() %>%
-  mutate(layer_diff = mean_surf - mean_bot,
-         quadratic_temp = mean_surf^2,
-         season = fct_collapse(month,
-                               "winter" = "dec",
-                               "winter" = "jan",
-                               "winter" = "feb",
-                               "spring" = "mar",
-                               "spring" = "apr",
-                               "spring" = "may",
-                               "summer" = "jun",
-                               "summer" = "jul",
-                               "summer" = "aug",
-                               "fall"   = "sep",
-                               "fall"   = "oct",
-                               "fall"   = "nov")) %>%
-  rename(ice_duration = ice_duration_days,
-         schmidt = schmidt_daily_annual_sum,
-         variance_after_ice_30 = coef_var_0.30, 
-         variance_after_ice_60 = coef_var_30.60, 
-         cumulative_above_0 = gdd_wtr_0c,
-         cumulative_above_5 = gdd_wtr_5c,
-         cumulative_above_10 = gdd_wtr_10c)
-```
-
-```{r}
-df2 <- df %>%
-  left_join(spatial_df, by = "wbic") %>%
-  mutate(lon_round = round(lon, 1),
-         lat_round = round(lat, 1)) %>%
-  left_join(census_df, by = c("lon_round", "lat_round"))
-```
-
-```{r}
-df2 <- df2 %>%
-  dplyr::select(-lon_round, -lat_round) %>%
-  drop_na()
-#sapply(df2, function(x) {sum(is.na(x))})
-```
-
-Add temp_index column via PCA.
-
-```{r}
-pr <- df2 %>%
-  dplyr::select(max_surf, mean_surf, mean_bot) %>%
-  prcomp(center = TRUE, scale = TRUE)
-
-temp_index <- df2 %>%
-  dplyr::select(max_surf, mean_surf, mean_bot) %>%
-  as.matrix() %*% pr$rotation[,1]
-
-df2 <- df2 %>%
-  add_column(temp_index)
-```
-
-```{r}
-write_csv(df2, "../processed/future_data.csv")
-
 rm(df)
 ```
 
