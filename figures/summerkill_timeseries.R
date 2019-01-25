@@ -9,9 +9,9 @@ library(DescTools)
 library(spdep)
 
 # Load data
-historical_data <- read_csv('../data/processed/historical_data.csv')
-future_data     <- read_csv('../data/processed/future_data.csv')
-lasso_fit_1     <- read_rds("../data/models/lasso_fit_1.rds")
+historical_data  <- read_csv('../data/processed/historical_data.csv')
+future_data      <- read_csv('../data/processed/future_data.csv')
+lasso_f1_logloss <- read_rds("../data/models/lasso_f1_logloss.rds")
 
 
 # Function to compute prediction interval via simulation
@@ -23,9 +23,9 @@ compute_quantile <- function(x, q, reps = 1000) {
 }
 
 # Process data
-predictions_1 <- predict(object = m1, 
-                         newx = select(future_data, m1_vars), 
-                         type = "prob")$pos
+predictions <- predict(object = lasso_f1_logloss, 
+                         newx = future_data, 
+                         type = "prob")
 future_data$prob <- predictions_1
 
 future_data <- future_data %>%
