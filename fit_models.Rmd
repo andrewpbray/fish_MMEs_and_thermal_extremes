@@ -61,15 +61,35 @@ testing  <- predict(pre_proc_values, testing)
 ```
 
 
-## Model 1: Lasso Logistic
+## Specify variable sets
+
+The first generalized model that we will consider is one using a subset of variables
+selected based on their presumed effect and being mutually non-correlated (at least
+strongly).
 
 ```{r}
 f1 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
   cumulative_above_10 + ice_duration + population + lon + lat + season + temp
 ```
 
+The second model involves all covariates that we have at our disposal (except wbic,
+which we treat separately because of the number of levels).
+
+```{r}
+f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + ice_duration + population + lon + lat + season + temp +
+  max_bot + max_surf + mean_bot + mean_surf + max_bot_z + max_surf_z + mean_bot_z +
+  mean_surf_z + layer_diff + quadratic_temp + peak_temp + cumulative_above_0 +
+  cumulative_above_5
+```
+
+
+## Lasso Logistic
+
 We first fit LASSO models with many difference lambdas, utilizing a 5-fold CV
 scheme, repeated once, on the training data.
+
+### f1, logloss, no downsampling
 
 ```{r}
 fitControl <- trainControl(method = "repeatedcv",
@@ -88,29 +108,49 @@ par_grid <-  expand.grid(alpha = 1,
 
 
 set.seed(825)
-lasso_fit_1 <- train(f, 
+lasso_fit_1 <- train(f1, 
                      data = training, 
                      method = "glmnet", 
                      metric = "mnLogLoss",
                      tuneGrid = par_grid,
                      trControl = fitControl)
 stopCluster(cl)
-write_rds(lasso_fit_1, "../models/lasso_fit_1.rds")
-
-ggplot(lasso_fit_1)
-ggplot(varImp(lasso_fit_1))
+write_rds(lasso_fit_1, "../models/lasso_f1_logloss.rds")
 ```
 
-
-## Model 2: Ridge logistic with full covariates
+### f1, logloss, with downsampling
 
 ```{r}
-f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
-  cumulative_above_10 + ice_duration + population + lon + lat + season + temp +
-  max_bot + max_surf + mean_bot + mean_surf + max_bot_z + max_surf_z + mean_bot_z +
-  mean_surf_z + layer_diff + quadratic_temp + peak_temp + cumulative_above_0 +
-  cumulative_above_5
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 5,
+                           repeats = 2,
+                           summaryFunction = mnLogLoss,
+                           classProbs = TRUE)
+
+library(doParallel)
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+# par_grid <-  expand.grid(alpha = 1,
+#                         lambda = seq(1.8e-6, 3.5e-6, 
+#                                      length.out = 4))
+
+
+set.seed(825)
+lasso_fit_1 <- train(f1, 
+                     data = training, 
+                     method = "glmnet", 
+                     metric = "mnLogLoss",
+                     #tuneGrid = par_grid,
+                     trControl = fitControl)
+stopCluster(cl)
+write_rds(lasso_fit_1, "../models/lasso_f1_logloss_downsampled.rds")
 ```
+
+
+## Ridge logistic
+
+### f2, logloss, no downsampling
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
@@ -125,68 +165,6 @@ ridge_fit_2 <- train(f2,
                      method = "glmnet", 
                      trControl = fitControl)
 stopCluster(cl)
-write_rds(ridge_fit_2, "../models/ridge_fit_2.rds")
-```
-
-
-## Model 3: Lasso logistic with month fixed effects
-
-```{r}
-m3_vars <- c(m1_vars, "month")
-
-training <- historical_data %>%
-  slice(in_training) %>%
-  select(m3_vars)
-
-testing  <- historical_data %>%
-  slice(-in_training) %>%
-  select(m3_vars)
-```
-
-```{r}
-pre_proc_values <- preProcess(training, method = c("center", "scale"))
-train_transformed <- predict(pre_proc_values, training)
-test_transformed  <- predict(pre_proc_values, testing)
-```
-
-```{r}
-cl <- makePSOCKcluster(6)
-registerDoParallel(cl)
-
-set.seed(825)
-lasso_fit_3 <- train(summerkill ~ ., data = training, 
-                 method = "glmnet", 
-                 trControl = fitControl)
-
-stopCluster(cl)
-write_rds(lasso_fit_3, "../lasso_fit_3.rds")
-```
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-m1 <- cv.glmnet(summerkill ~ .,
-                data = historical_data[in_training, c(m1_vars, "summerkill")],
-                family = "binomial",
-                parallel = TRUE, 
-                type.measure = "auc",
-                keep = TRUE
-)
-
-m2 <- cv.glmnet(summerkill ~ .,
-                data = historical_data[in_training, c(m1_vars, "summerkill")],
-                family = "binomial",
-                parallel = TRUE, 
-                type.measure = "auc",
-                keep = TRUE
-)
+write_rds(ridge_fit_2, "../models/ridge_f1_logloss.rds")
 ```
 
