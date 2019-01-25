@@ -13,6 +13,11 @@ historical_data  <- read_csv('../data/processed/historical_data.csv')
 future_data      <- read_csv('../data/processed/future_data.csv')
 lasso_f1_logloss <- read_rds("../data/models/lasso_f1_logloss.rds")
 
+# Stand-in model
+m1 <- glm(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+            cumulative_above_10 + population + lon + lat + season + temp,
+          data =  historical_data,
+          family = binomial)
 
 # Function to compute prediction interval via simulation
 compute_quantile <- function(x, q, reps = 1000) {
@@ -22,37 +27,41 @@ compute_quantile <- function(x, q, reps = 1000) {
     quantile(q)
 }
 
-# Process data
-predictions <- predict(object = lasso_f1_logloss, 
-                         newx = future_data, 
-                         type = "prob")
-future_data$prob <- predictions_1
 
-future_data <- future_data %>%
+# Process data
+predictions <- predict(object = m1, 
+                       newdata = future_data, 
+                       type = "response")
+
+f_data <- future_data %>%
+  add_column(prob = predictions) %>%
   group_by(year) %>%
-  summarize(Temp = mean(mean_surf),
-            kills = sum(prob),
-            #lb_kill    = compute_quantile(prob, q = .025, reps = 300),
-            #ub_kill    = compute_quantile(prob, q = .975, reps = 300)
+  summarize(temp       = mean(mean_surf),
+            kills      = sum(prob),
+            lb_kill    = compute_quantile(prob, q = .025, reps = 300),
+            ub_kill    = compute_quantile(prob, q = .975, reps = 300)
             ) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted,
-         lb_smooth = loess(kills ~ year, .)$fitted,
-         ub_smooth = loess(kills ~ year, .)$fitted)
+         lb_smooth    = loess(kills ~ year, .)$fitted,
+         ub_smooth    = loess(kills ~ year, .)$fitted)
 
 hist_data <- historical_data %>% 
-  mutate(summerkill = ifelse(is.na(summerkill), 
-                             0, summerkill)) %>%
+  filter(year < 2014) %>%
   group_by(year) %>%
-  summarize(kills = sum(summerkill), 
-            Temp = mean(mean_surf)) %>%
+  summarize(temp = mean(mean_surf),
+            kills = sum(summerkill)) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted)
 
-gap_data <- tibble(year = c(2014:2041, 2060:2079))
+gap_data <- tibble(year = c(2014:2040, 2060:2080))
 
-full_data <- future_data %>%
+full_data <- f_data %>%
   bind_rows(hist_data, gap_data)
 
-ggplot(full_data, aes(x = year)) +
+
+# Construct timeseries plot
+p_timeseries <- ggplot(full_data, aes(x = year)) +
+  geom_rect(xmin = 2015, xmax = 2040, ymin = 0, ymax = 110, fill = "gray", alpha = .002) +
+  geom_rect(xmin = 2060, xmax = 2080, ymin = 0, ymax = 110, fill = "gray", alpha = .002) +
   geom_line(aes(y = kills_smooth)) +
   geom_line(aes(y = lb_smooth), linetype = "dashed") +
   geom_line(aes(y = ub_smooth), linetype = "dashed") +
@@ -61,9 +70,14 @@ ggplot(full_data, aes(x = year)) +
   theme_bw()
 
 
+# Temperature plot
+p_temp <- full_data %>%
+  ggplot(aes(x = year, y = 1, fill = temp)) +
+  geom_tile() +
+  theme_void()
 
-
-
+library(patchwork)
+p_timeseries + p_temp + plot_layout(ncol = 1, heights = c(8, 1))
 
 
 
