@@ -7,6 +7,7 @@ library(scales)
 library(car)
 library(DescTools)
 library(spdep)
+library(patchwork)
 
 # Load data
 historical_data <- read_csv('../data/processed/historical_data.csv')
@@ -23,12 +24,19 @@ compute_quantile <- function(x, q, reps = 1000) {
 }
 
 # Process data
-predictions_1 <- predict(object = m1, 
-                         newx = select(future_data, m1_vars), 
-                         type = "prob")$pos
-future_data$prob <- predictions_1
+g <- future_data %>%
+  dplyr::select(variance_after_ice_30, variance_after_ice_60,
+                log_schmidt, cumulative_above_10, population, lon, lat, season, temp)
+
+g2 <- g %>%
+  mutate_if(is.numeric, scale)
+
+prob <- predict(object = m1, 
+                newx = data.frame(g2), 
+                type = "response")
 
 future_data <- future_data %>%
+  add_column(prob) %>%
   group_by(year) %>%
   summarize(temp    = mean(mean_surf),
             kills   = sum(prob),
@@ -40,8 +48,6 @@ future_data <- future_data %>%
          ub_smooth    = loess(kills ~ year, .)$fitted)
 
 hist_data <- historical_data %>% 
-  mutate(summerkill = ifelse(is.na(summerkill), 
-                             0, summerkill)) %>%
   group_by(year) %>%
   summarize(kills = sum(summerkill), 
             temp = mean(mean_surf)) %>%
@@ -60,21 +66,20 @@ ggplot(full_data, aes(x = year)) +
   xlab(NULL) +
   theme_bw()
 
+# scratch code to make temperature bar
 df <- tibble(year = factor(2011:2035),
              y = 0,
              temp = factor(rep(1:5, 5)))
 
 ggplot(df, aes(x = year, y = y, fill = temp)) +
   geom_tile() +
-  theme_minimal() +
-  theme(axis.ticks = NULL)
+  theme_minimal()
 
 
 
 
 
-
-
+# old code
 
 make_quantiles <- function(x, probs = seq(0, 1, by = .2)) {
   qu <- quantile(x, probs = probs)
