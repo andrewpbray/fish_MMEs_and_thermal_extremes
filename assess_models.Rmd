@@ -1,5 +1,5 @@
 ---
-title: "Process Models"
+title: "Assess Models"
 author: "Aaron Till and Andrew Bray"
 output: html_document
 ---
@@ -13,24 +13,17 @@ library(e1071)
 library(broom)
 ```
 
-## Load data and model
+## Load and partition data
 
 ```{r}
 setwd("data")
 historical_data <- read_csv("processed/historical_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             summerkill = col_factor(NULL),
+                            col_types = list(summerkill = col_character(),
                                              ice_duration = col_double())) %>%
   select(-cause.category.4)
-
-future_data <- read_csv("processed/future_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             ice_duration = col_double()))
 ```
+
+Separate into same test/train partition as used in model fitting.
 
 ```{r}
 set.seed(998)
@@ -49,15 +42,46 @@ testing  <- historical_data %>%
 
 pre_proc_values <- preProcess(training, method = c("center", "scale"))
 training <- predict(pre_proc_values, training)
-testing  <- predict(pre_proc_values, testing)
+testing  <- predict(pre_proc_values, testing) %>%
+  mutate(summerkill = factor(testing$summerkill, 
+                             levels = c("pos", "neg"), 
+                             ordered = TRUE))
+```
+
+## Load models
+
+```{r}
+lasso_f1_logloss             <- read_rds("models/lasso_f1_logloss.rds")
+lasso_f1_logloss_downsampled <- read_rds("models/lasso_f1_logloss_downsampled.rds")
+re_f1                        <- read_rds("models/re_f1.rds")
+```
+
+## Make predictions
+
+```{r}
+p_lasso_f1_logloss             <- predict(lasso_f1_logloss, testing, type = "prob")
+p_lasso_f1_logloss_downsampled <- predict(lasso_f1_logloss_downsampled, testing, type = "prob")
 ```
 
 ```{r}
-lasso_f1_logloss <- read_rds("models/lasso_f1_logloss.rds")
-lasso_f1_logloss_downsampled <- read_rds("models/lasso_f1_logloss_downsampled.rds")
+testing %>%
+  select(summerkill) %>%
+  bind_cols(p_lasso_f1_logloss) %>%
+  mutate(predicted = as.factor(ifelse(pos > .5, "pos", "neg"))) %>%
+  metrics(truth = summerkill, estimate = predicted)
+  roc_auc(summerkill, pos)
+
+testing %>%
+  select(summerkill) %>%
+  bind_cols(p_lasso_f1_logloss_downsampled) %>%
+  roc_auc(summerkill, pos)
+
+
 ```
 
-## 
+
+
+
 
 ```{r}
 ggplot(lasso_f1_logloss)
