@@ -46,6 +46,8 @@ testing  <- predict(pre_proc_values, testing) %>%
   mutate(summerkill = factor(testing$summerkill, 
                              levels = c("pos", "neg"), 
                              ordered = TRUE))
+
+future  <- predict(pre_proc_values, future_data))
 ```
 
 ## Load models
