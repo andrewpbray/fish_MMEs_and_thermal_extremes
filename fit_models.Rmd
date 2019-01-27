@@ -17,50 +17,25 @@ library(glmnetUtils)
 library(lme4)
 ```
 
-## Prepare data
+## Load prepared data
 
 ```{r}
-setwd("data/processed/")
-historical_data <- read_csv("historical_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             summerkill = col_factor(NULL),
-                                             ice_duration = col_double())) %>%
-  select(-cause.category.4)
+setwd("data/prepared_for_modeling/")
+training <- read_csv("training.csv",
+                     col_types = list(wbic = col_character(),
+                                      year = col_character(),
+                                      month  = col_character(),
+                                      season = col_character(),
+                                      summerkill = col_character(),
+                                      ice_duration = col_double()))
 
-future_data <- read_csv("future_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             ice_duration = col_double()))
+testing <- read_csv("testing.csv",
+                    col_types = list(wbic = col_character(),
+                                     year = col_character(),
+                                     month  = col_character(),
+                                     season = col_character(),
+                                     ice_duration = col_double()))
 ```
-
-```{r}
-set.seed(998)
-in_training <- createDataPartition(historical_data$summerkill,
-                                  p = .75, list = FALSE)
-
-training <- historical_data %>%
-  mutate(summerkill = fct_recode(summerkill,
-                                 "neg" = "0",
-                                 "pos" = "1")) %>%
-  slice(in_training)
-testing  <- historical_data %>%
-  mutate(summerkill = fct_recode(summerkill,
-                                 "neg" = "0",
-                                 "pos" = "1")) %>%
-  slice(-in_training)
-```
-
-In order to compare coefficients, we center and scale the predictors.
-
-```{r}
-pre_proc_values <- preProcess(training, method = c("center", "scale"))
-training <- predict(pre_proc_values, training)
-testing  <- predict(pre_proc_values, testing)
-```
-
 
 ## Specify variable sets
 
