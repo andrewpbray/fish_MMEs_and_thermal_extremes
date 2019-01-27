@@ -6,28 +6,67 @@ output: html_document
 
 This file serves as a second pass at data processing with the aim to prepare and standardize the data that will be used to fit the various models.
 
-```{r}
-library(tidyverse)
-historical_data <- read_csv("data/processed/historical_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             summerkill = col_factor(NULL),
-                                             ice_duration = col_double()))
-
-future_data <- read_csv("data/processed/future_data.csv",
-                            col_types = list(wbic = col_factor(NULL),
-                                             month  = col_factor(NULL),
-                                             season = col_factor(NULL),
-                                             ice_duration = col_double()))
-```
-
+### Load
 
 ```{r}
-sum(historical_data$summerkill == "pos")
+setwd("data/processed/")
+historical_data <- read_csv("historical_data.csv",
+                            col_types = list(wbic = col_character(),
+                                             year = col_character(),
+                                             month  = col_character(),
+                                             season = col_character(),
+                                             summerkill = col_character(),
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill)
+
+future_data <- read_csv("future_data.csv",
+                        col_types = list(wbic = col_character(),
+                                         year = col_character(),
+                                         month  = col_character(),
+                                         season = col_character(),
+                                         ice_duration = col_double()))
 ```
 
- 
+## Partition
+
+```{r}
+set.seed(998)
+in_training <- createDataPartition(historical_data$summerkill,
+                                  p = .75, list = FALSE)
+training <- historical_data %>%
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(in_training)
+testing  <- historical_data %>%
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1")) %>%
+  slice(-in_training)
+```
+
+## Scale
+
+```{r}
+pre_proc_values <- preProcess(training, method = c("center", "scale"))
+training <- predict(pre_proc_values, training) %>%
+  mutate(year = as.integer(year))
+testing  <- predict(pre_proc_values, testing) %>%
+  mutate(summerkill = factor(testing$summerkill, 
+                             levels = c("pos", "neg"), 
+                             ordered = TRUE),
+         year = as.integer(year))
+future  <- predict(pre_proc_values, future_data) %>%
+  mutate(year = as.integer(year))
+```
+
+## Write out data
+
+```{r}
+write_csv(training, "../prepared_for_modeling/training.csv")
+write_csv(testing, "../prepared_for_modeling/testing.csv")
+write_csv(future, "../prepared_for_modeling/future.csv")
+```
 
 
 
