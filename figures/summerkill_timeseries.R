@@ -14,10 +14,10 @@ setwd("../data/processed/")
 historical_data <- read_csv("historical_data.csv",
                             col_types = list(ice_duration = col_double()))
 
-future_data <- read_csv("future_data.csv",
+future <- read_csv("../prepared_for_modeling/future.csv",
                         col_types = list(ice_duration = col_double()))
 
-lasso_f1_logloss             <- read_rds("../data/models/lasso_f1_logloss.rds")
+lasso_f1_logloss             <- read_rds("../models/lasso_f1_logloss.rds")
 lasso_f1_logloss_downsampled <- read_rds("../data/models/lasso_f1_logloss_downsampled.rds")
 re_f1                        <- read_rds("../data/models/re_f1.rds")
 
@@ -36,7 +36,7 @@ predictions <- predict(object = m1,
                        type = "response")
 
 predictions <- predict(object = lasso_f1_logloss, 
-                       newdata = future_data, 
+                       newdata = future, 
                        type = "prob")$pos
 
 predictions <- predict(object = lasso_f1_logloss_downsampled, 
@@ -57,7 +57,7 @@ compute_quantile <- function(x, q, reps = 1000) {
 }
 
 # Prepare data for plot
-f_data <- future_data %>%
+f_data <- future %>%
   add_column(prob = predictions) %>%
   group_by(year) %>%
   summarize(temp       = mean(mean_surf),
