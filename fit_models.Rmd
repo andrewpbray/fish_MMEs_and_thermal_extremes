@@ -14,6 +14,7 @@ library(e1071)
 library(pROC)
 library(PRROC) 
 library(glmnetUtils)
+library(doParallel)
 library(lme4)
 ```
 
@@ -27,14 +28,16 @@ training <- read_csv("training.csv",
                                       month  = col_character(),
                                       season = col_character(),
                                       summerkill = col_character(),
-                                      ice_duration = col_double()))
+                                      ice_duration = col_double())) %>%
+  mutate(summerkill = as.factor(summerkill))
 
 testing <- read_csv("testing.csv",
                     col_types = list(wbic = col_character(),
                                      year = col_character(),
                                      month  = col_character(),
                                      season = col_character(),
-                                     ice_duration = col_double()))
+                                     ice_duration = col_double())) %>%
+  mutate(summerkill = as.factor(summerkill))
 ```
 
 ## Specify variable sets
@@ -60,6 +63,23 @@ f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
 ```
 
 
+## Set up params for parameter selection
+
+```{r}
+control_logloss <- trainControl(method = "repeatedcv",
+                                number = 5,
+                                repeats = 2,
+                                summaryFunction = mnLogLoss,
+                                classProbs = TRUE)
+control_logloss_ds <- trainControl(method = "repeatedcv",
+                                   number = 5,
+                                   repeats = 3,
+                                   summaryFunction = mnLogLoss,
+                                   classProbs = TRUE,
+                                   sampling = "down")
+```
+
+
 ## Lasso Logistic
 
 We first fit LASSO models with many difference lambdas, utilizing a 5-fold CV
@@ -68,29 +88,20 @@ scheme, repeated once, on the training data.
 ### f1, logloss, no downsampling
 
 ```{r}
-fitControl <- trainControl(method = "repeatedcv",
-                           number = 5,
-                           repeats = 2,
-                           summaryFunction = mnLogLoss,
-                           classProbs = TRUE)
-
-library(doParallel)
 cl <- makePSOCKcluster(6)
 registerDoParallel(cl)
 
 par_grid <-  expand.grid(alpha = 1,
-                        lambda = seq(1.8e-6, 3.5e-6, 
-                                     length.out = 4))
-
+                        lambda = seq(1.5e-6, 1e-5, 
+                                     length.out = 6))
 
 set.seed(825)
-lasso_f1_logloss <- train(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
-  cumulative_above_10 + population + lon + lat + season + temp, 
+lasso_f1_logloss <- train(f1, 
                      data = training, 
                      method = "glmnet", 
                      metric = "mnLogLoss",
-                     #tuneGrid = par_grid,
-                     trControl = fitControl)
+                     tuneGrid = par_grid,
+                     trControl = control_logloss)
 stopCluster(cl)
 write_rds(lasso_f1_logloss, "../models/lasso_f1_logloss.rds")
 ```
@@ -98,14 +109,6 @@ write_rds(lasso_f1_logloss, "../models/lasso_f1_logloss.rds")
 ### f1, logloss, with downsampling
 
 ```{r}
-fitControl <- trainControl(method = "repeatedcv",
-                           number = 5,
-                           repeats = 3,
-                           summaryFunction = mnLogLoss,
-                           classProbs = TRUE,
-                           sampling = "down")
-
-library(doParallel)
 cl <- makePSOCKcluster(4)
 registerDoParallel(cl)
 
@@ -113,23 +116,100 @@ par_grid <-  expand.grid(alpha = 1,
                         lambda = 10^seq(-3, -1, length = 10))
 
 set.seed(825)
-lasso_f1_logloss_downsampled <- train(summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
-  cumulative_above_10 + population + lon + lat + season + temp, 
+lasso_f1_logloss_downsampled <- train(f1, 
                                       data = training, 
                                       method = "glmnet", 
                                       metric = "mnLogLoss",
                                       tuneGrid = par_grid,
-                                      trControl = fitControl)
+                                      trControl = control_logloss_ds)
 stopCluster(cl)
 write_rds(lasso_f1_logloss_downsampled, "../models/lasso_f1_logloss_downsampled.rds")
-ggplot(lasso_f1_logloss_downsampled)
-ggplot(varImp(lasso_f1_logloss_downsampled))
+```
+
+### f2, logloss, no downsampling
+
+```{r}
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+#par_grid <-  expand.grid(alpha = 1,
+                        # lambda = seq(1.5e-6, 1e-5, 
+                        #              length.out = 6))
+
+set.seed(825)
+lasso_f2_logloss <- train(f2, 
+                     data = training, 
+                     method = "glmnet", 
+                     metric = "mnLogLoss",
+                     #tuneGrid = par_grid,
+                     trControl = control_logloss)
+stopCluster(cl)
+write_rds(lasso_f2_logloss, "../models/lasso_f2_logloss.rds")
+```
+
+### f2, logloss, downsampled
+
+```{r}
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+#par_grid <-  expand.grid(alpha = 1,
+                        # lambda = seq(1.5e-6, 1e-5, 
+                        #              length.out = 6))
+
+set.seed(825)
+lasso_f2_logloss_downsampled <- train(f2, 
+                                      data = training, 
+                                      method = "glmnet", 
+                                      metric = "mnLogLoss",
+                                      #tuneGrid = par_grid,
+                                      trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(lasso_f2_logloss_downsampled, "../models/lasso_f2_logloss_downsampled.rds")
 ```
 
 
 ## Ridge logistic
 
-### f2, logloss, no downsampling
+### f1, logloss, no downsampling
+
+```{r}
+par_grid <-  expand.grid(alpha = 0,
+                        lambda = seq(3.5e-7, 1.5e-5,
+                                     length.out = 6))
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+set.seed(825)
+ridge_f1_logloss <- train(f1, 
+                          data = training, 
+                          method = "glmnet",
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss)
+stopCluster(cl)
+write_rds(ridge_f1_logloss, "../models/ridge_f1_logloss.rds")
+```
+
+### f1, logloss, with downsampling
+
+```{r}
+par_grid <-  expand.grid(alpha = 0,
+                        lambda = seq(3.5e-8, 3.5e7,
+                                     length.out = 8))
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+set.seed(825)
+ridge_f1_logloss_downsampled <- train(f1, 
+                          data = training, 
+                          method = "glmnet",
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(ridge_f1_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.rds")
+```
+
+### f2, logloss, with downsampling
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
@@ -139,12 +219,12 @@ cl <- makePSOCKcluster(8)
 registerDoParallel(cl)
 
 set.seed(825)
-ridge_fit_2 <- train(f2, 
+ridge_f2_logloss_downsampled <- train(f2, 
                      data = training, 
                      method = "glmnet", 
-                     trControl = fitControl)
+                     trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(ridge_fit_2, "../models/ridge_f1_logloss.rds")
+write_rds(ridge_f2_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.rds")
 ```
 
 
