@@ -68,7 +68,7 @@ plot_timeseries <- function(model, future_data, historical_data) {
 }
 ```
 
-## Load and partition data
+## Load partitioned data
 
 ```{r}
 setwd("data/prepared_for_modeling/")
