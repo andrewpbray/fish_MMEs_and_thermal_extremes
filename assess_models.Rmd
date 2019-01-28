@@ -11,6 +11,7 @@ library(glmnet)
 library(Matrix)
 library(e1071)
 library(broom)
+library(yardstick)
 ```
 
 
@@ -70,7 +71,7 @@ plot_timeseries <- function(model, future_data, historical_data) {
 ## Load and partition data
 
 ```{r}
-setwd("../prepared_for_modeling/")
+setwd("data/prepared_for_modeling/")
 training <- read_csv("training.csv",
                      col_types = list(wbic = col_character(),
                                       year = col_character(),
@@ -96,108 +97,9 @@ setwd("../models")
 model_names <- list.files()
 all_models <- model_names %>%
   map(., ~read_rds(.x))
-all_models <- tibble(name  = model_names,
+all_models <- tibble(name  = str_sub(str_extract(model_names, "^.*\\."), 
+                                     1, -2),
                      model = all_models)
-```
-
-## Coefficient plots
-
-```{r}
-# LASSO
-m <- lasso_f1_logloss$finalModel %>%
-  coef(lasso_f1_logloss$bestTune$lambda) 
-coef_lasso_f1_logloss <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Lasso F1, logloss")
-plot_coefs(coef_lasso_f1_logloss)
-
-m <- lasso_f1_logloss_downsampled$finalModel %>%
-  coef(lasso_f1_logloss_downsampled$bestTune$lambda) 
-coef_lasso_f1_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Lasso F1, logloss, downsampled")
-plot_coefs(coef_lasso_f1_logloss_downsampled)
-
-m <- lasso_f2_logloss$finalModel %>%
-  coef(lasso_f2_logloss$bestTune$lambda) 
-coef_lasso_f2_logloss <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Lasso F2, logloss")
-plot_coefs(coef_lasso_f2_logloss)
-
-m <- lasso_f2_logloss_downsampled$finalModel %>%
-  coef(lasso_f2_logloss_downsampled$bestTune$lambda) 
-coef_lasso_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Lasso F2, logloss, downsampled")
-plot_coefs(coef_lasso_f2_logloss_downsampled)
-
-# Ridge
-
-m <- ridge_f1_logloss$finalModel %>%
-  coef(ridge_f1_logloss$bestTune$lambda) 
-coef_ridge_f1_logloss <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Ridge F1, logloss")
-plot_coefs(coef_ridge_f1_logloss)
-
-m <- ridge_f1_logloss_downsampled$finalModel %>%
-  coef(ridge_f1_logloss_downsampled$bestTune$lambda) 
-coef_ridge_f1_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Ridge F1, logloss, downsampled")
-plot_coefs(coef_ridge_f1_logloss_downsampled)
-
-m <- ridge_f2_logloss_downsampled$finalModel %>%
-  coef(ridge_f2_logloss_downsampled$bestTune$lambda) 
-coef_ridge_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Ridge F2, logloss, downsampled")
-plot_coefs(coef_ridge_f2_logloss_downsampled)
-
-m <- ridge_f2_logloss_downsampled$finalModel %>%
-  coef(ridge_f2_logloss_downsampled$bestTune$lambda) 
-coef_ridge_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
-  filter(term != "(Intercept)") %>%
-  select(term, estimate) %>%
-  add_column(model = "Ridge F2, logloss, downsampled")
-plot_coefs(coef_ridge_f2_logloss_downsampled)
-  
-# Random Effects
-coef_re_f1 <- re_f1 %>%
-  tidy() %>%
-  filter(group == "fixed") %>%
-  filter(term != "(Intercept)") %>%
-  filter(p.value <= .3) %>%
-  select(term, estimate) %>%
-  add_column(model = "Random Effects")
-plot_coefs(coef_re_f1)
-
-# Combined
-bind_rows(coef_lasso_f1_logloss,
-          coef_lasso_f1_logloss_downsampled,
-          coef_lasso_f2_logloss,
-          coef_lasso_f2_logloss_downsampled,
-          coef_ridge_f1_logloss,
-          coef_ridge_f1_logloss_downsampled,
-          coef_ridge_f2_logloss,
-          coef_ridge_f2_logloss_downsampled,
-          coef_re_f1) %>%
-  ggplot(aes(x = fct_reorder(term, estimate), 
-             y = estimate, 
-             fill = estimate > 0)) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~ model, ncol = 4) +
-  coord_flip() +
-  labs(x = NULL) +
-  theme_bw()
 ```
 
 ## Metrics
@@ -229,22 +131,58 @@ for (i in 1:nrow(all_models)) {
 }
 
 all_models <- all_models %>%
-  add_column(auc, logloss)
-
-testing %>%
-  select(summerkill) %>%
-  bind_cols(p_lasso_f1_logloss) %>%
-  mutate(predicted = as.factor(ifelse(pos > .5, "pos", "neg"))) %>%
-  metrics(truth = summerkill, estimate = predicted)
-  roc_auc(summerkill, pos)
-
-testing %>%
-  select(summerkill) %>%
-  bind_cols(p_lasso_f1_logloss_downsampled) %>%
-  roc_auc(summerkill, pos)
+  add_column(auc, logloss) %>%
+  arrange(logloss, auc)
 ```
 
-## Future preditions
+## Coefficients
+
+Extract coefficients from each model.
+
+```{r}
+extract_coef <- function(model, name) {
+  if ("train" %in% class(model)) {
+    m <- model$finalModel %>%
+      coef(model$bestTune$lambda)
+    out <- tibble(term = row.names(m),
+                  estimate = m[, 1]) %>%
+      filter(term != "(Intercept)") %>%
+      select(term, estimate)
+  }
+  if ("glmerMod" %in% class(model)) {
+    out <- model %>%
+      tidy() %>%
+      filter(group == "fixed") %>%
+      filter(term != "(Intercept)") %>%
+      filter(p.value <= .3) %>%
+      select(term, estimate)
+  }
+  if ("glm" %in% class(model)) {
+    out <- model %>%
+      tidy() %>%
+      filter(term != "(Intercept)") %>%
+      select(term, estimate)
+  }
+}
+
+all_models <- all_models %>%
+  mutate(coef = map2(model, name, extract_coef))
+```
+
+Plot coefficients.
+
+```{r}
+all_models %>%
+  unnest(coef) %>%
+  ggplot(aes(x = fct_reorder(term, estimate), 
+             y = estimate, 
+             fill = estimate > 0)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ name, ncol = 2) +
+  coord_flip() +
+  labs(x = NULL) +
+  theme_bw()
+```
 
 
 
