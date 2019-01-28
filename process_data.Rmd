@@ -54,7 +54,7 @@ MME <- MME %>%
   spread(cause.categories, dummy, fill = 0) %>%
   rename(anthropogenic = `anthropogenic condition`,
          infectious    = `infectious agent`) %>%
-  select(-fishkill.inv.seq.no) %>%
+ dplyr::select(-fishkill.inv.seq.no) %>%
   distinct(wbic, year, month, .keep_all = TRUE)
 ```
 
@@ -68,7 +68,7 @@ thermal <- thermal %>%
   filter(Year >= 2003) %>%
   rename_all(tolower) %>%
   mutate(year = as.character(year)) %>%
-  select(-contains("strat"),
+ dplyr::select(-contains("strat"),
          -sthermo_depth_mean)
 ```
 
@@ -121,7 +121,7 @@ thermal_monthly <- thermal %>%
   separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
   unite(metric, metric, depth) %>%
   spread(metric, temperature) %>%
-  select(-uniqueid) %>%
+ dplyr::select(-uniqueid) %>%
   group_by(wbic, year, month) %>%                      # average over sites
   summarise_if(is.numeric, mean, na.rm = TRUE) %>%
   ungroup() %>%
@@ -284,7 +284,7 @@ thermal <- thermal %>%
   rename_all(tolower) %>%
   filter(year >= 2013) %>%
   mutate(year = as.character(year)) %>%
-  select(-contains("strat"),
+ dplyr::select(-contains("strat"),
          -sthermo_depth_mean)
 ```
 
@@ -325,7 +325,7 @@ thermal_monthly <- thermal %>%
   separate(type, into=c('metric', 'depth', 'month'), sep='_')  %>%
   unite(metric, metric, depth) %>%
   spread(metric, temperature) %>%
-  select(-uniqueid) %>%
+ dplyr::select(-uniqueid) %>%
   group_by(wbic, year, month) %>%                      # average over sites
   summarise_if(is.numeric, mean, na.rm = TRUE) %>%
   ungroup() %>%
