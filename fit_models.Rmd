@@ -200,11 +200,11 @@ cl <- makePSOCKcluster(6)
 registerDoParallel(cl)
 set.seed(825)
 ridge_f1_logloss_downsampled <- train(f1, 
-                          data = training, 
-                          method = "glmnet",
-                          metric = "logLoss",
-                          tuneGrid = par_grid,
-                          trControl = control_logloss_ds)
+                                      data = training, 
+                                      method = "glmnet",
+                                      metric = "logLoss",
+                                      tuneGrid = par_grid,
+                                      trControl = control_logloss_ds)
 stopCluster(cl)
 write_rds(ridge_f1_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.rds")
 ```
@@ -213,18 +213,41 @@ write_rds(ridge_f1_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
-                        lambda = seq(1.8e-8, 3.5e-6, 
+                        lambda = seq(.01, .25, 
                                      length.out = 8))
-cl <- makePSOCKcluster(8)
+cl <- makePSOCKcluster(5)
 registerDoParallel(cl)
 
 set.seed(825)
 ridge_f2_logloss_downsampled <- train(f2, 
-                     data = training, 
-                     method = "glmnet", 
-                     trControl = control_logloss_ds)
+                                      data = training, 
+                                      method = "glmnet", 
+                                      metric = "logLoss",
+                                      tuneGrid = par_grid,
+                                      trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(ridge_f2_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.rds")
+write_rds(ridge_f2_logloss_downsampled, "../models/ridge_f2_logloss_downsampled.rds")
+```
+
+### f2, logloss, without downsampling
+### No apparent optimal model
+
+```{r}
+par_grid <-  expand.grid(alpha = 0,
+                        lambda = 10^seq(-6, -8,
+                                     length.out = 8))
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+set.seed(825)
+ridge_f2_logloss <- train(f2, 
+                          data = training, 
+                          method = "glmnet", 
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss)
+stopCluster(cl)
+write_rds(ridge_f2_logloss, "../models/ridge_f2_logloss.rds")
 ```
 
 
