@@ -339,4 +339,3 @@ m1 <- lmer(f1_re,
 
 write_rds(re_f1, "../models/re_f1.rds")
 ```
-
