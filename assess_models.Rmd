@@ -70,7 +70,7 @@ plot_timeseries <- function(model, future_data, historical_data) {
 ## Load and partition data
 
 ```{r}
-setwd("data/prepared_for_modeling/")
+setwd("../prepared_for_modeling/")
 training <- read_csv("training.csv",
                      col_types = list(wbic = col_character(),
                                       year = col_character(),
@@ -137,6 +137,38 @@ coef_lasso_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1
 plot_coefs(coef_lasso_f2_logloss_downsampled)
 
 # Ridge
+
+m <- ridge_f1_logloss$finalModel %>%
+  coef(ridge_f1_logloss$bestTune$lambda) 
+coef_ridge_f1_logloss <- tibble(term = row.names(m), estimate = m[,1]) %>%
+  filter(term != "(Intercept)") %>%
+  select(term, estimate) %>%
+  add_column(model = "Ridge F1, logloss")
+plot_coefs(coef_ridge_f1_logloss)
+
+m <- ridge_f1_logloss_downsampled$finalModel %>%
+  coef(ridge_f1_logloss_downsampled$bestTune$lambda) 
+coef_ridge_f1_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
+  filter(term != "(Intercept)") %>%
+  select(term, estimate) %>%
+  add_column(model = "Ridge F1, logloss, downsampled")
+plot_coefs(coef_ridge_f1_logloss_downsampled)
+
+m <- ridge_f2_logloss_downsampled$finalModel %>%
+  coef(ridge_f2_logloss_downsampled$bestTune$lambda) 
+coef_ridge_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
+  filter(term != "(Intercept)") %>%
+  select(term, estimate) %>%
+  add_column(model = "Ridge F2, logloss, downsampled")
+plot_coefs(coef_ridge_f2_logloss_downsampled)
+
+m <- ridge_f2_logloss_downsampled$finalModel %>%
+  coef(ridge_f2_logloss_downsampled$bestTune$lambda) 
+coef_ridge_f2_logloss_downsampled <- tibble(term = row.names(m), estimate = m[,1]) %>%
+  filter(term != "(Intercept)") %>%
+  select(term, estimate) %>%
+  add_column(model = "Ridge F2, logloss, downsampled")
+plot_coefs(coef_ridge_f2_logloss_downsampled)
   
 # Random Effects
 coef_re_f1 <- re_f1 %>%
@@ -153,12 +185,16 @@ bind_rows(coef_lasso_f1_logloss,
           coef_lasso_f1_logloss_downsampled,
           coef_lasso_f2_logloss,
           coef_lasso_f2_logloss_downsampled,
+          coef_ridge_f1_logloss,
+          coef_ridge_f1_logloss_downsampled,
+          coef_ridge_f2_logloss,
+          coef_ridge_f2_logloss_downsampled,
           coef_re_f1) %>%
   ggplot(aes(x = fct_reorder(term, estimate), 
              y = estimate, 
              fill = estimate > 0)) +
   geom_col(show.legend = FALSE) +
-  facet_grid(~ model) +
+  facet_wrap(~ model, ncol = 4) +
   coord_flip() +
   labs(x = NULL) +
   theme_bw()
@@ -166,21 +202,35 @@ bind_rows(coef_lasso_f1_logloss,
 
 ## Metrics
 
-Extract fitted values.
+Extract fitted values and append as new column.
 
 ```{r}
-predict_route(model, newdata) {
+predict_route <- function(model, newdata) {
   if("train" %in% class(model)) {
-    predict(model, newdata, "prob")
-  } else {predict(model, newdata, "response")}
+    predict(model, newdata, type = "prob")$pos
+  } else {predict(model, newdata, type = "response")}
 }
 
-p <- all_models %>%
+all_models <- all_models %>%
+  mutate(fit_test = map(model, predict_route, newdata = testing))
 ```
 
-Calculate metrics.
+Calculate logloss and auc.
 
 ```{r}
+# the following can be made more concise w map()
+auc <- rep(NA, nrow(all_models))
+logloss <- auc
+for (i in 1:nrow(all_models)) {
+  a <- tibble(fit_test = all_models$fit_test[[i]],
+              truth    = testing$summerkill)
+  auc[i] <- roc_auc(a, truth, fit_test)$.estimate
+  logloss[i] <- mn_log_loss(a, truth, fit_test)$.estimate
+}
+
+all_models <- all_models %>%
+  add_column(auc, logloss)
+
 testing %>%
   select(summerkill) %>%
   bind_cols(p_lasso_f1_logloss) %>%
