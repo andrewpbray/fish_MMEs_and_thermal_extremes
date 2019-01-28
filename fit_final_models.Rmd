@@ -1,0 +1,109 @@
+---
+title: "Fit final models"
+author: "Aaron Till and Andrew Bray"
+date: "1/28/2019"
+output: html_document
+---
+
+## Load packages
+
+```{r}
+library(tidyverse)
+library(rsample)
+library(caret)
+library(glmnet)
+library(Matrix)
+library(e1071)
+library(pROC)
+library(PRROC) 
+library(glmnetUtils)
+library(doParallel)
+library(lme4)
+```
+
+## Load 
+
+```{r}
+setwd("data/processed/")
+historical_data <- read_csv("historical_data.csv",
+                            col_types = list(wbic = col_character(),
+                                             year = col_character(),
+                                             month  = col_character(),
+                                             season = col_character(),
+                                             summerkill = col_character(),
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill)
+```
+
+Scale data.
+
+```{r}
+pre_proc_values <- preProcess(historical_data, method = c("center", "scale"))
+historical_data  <- predict(pre_proc_values, historical_data)
+```
+
+
+## Fit final models
+
+Specify predictor set and control parameters.
+
+```{r}
+f1 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
+  cumulative_above_10 + ice_duration + population + lon + lat + season + temp
+
+control_logloss_ds <- trainControl(method = "repeatedcv",
+                                   number = 5,
+                                   repeats = 5,
+                                   summaryFunction = mnLogLoss,
+                                   classProbs = TRUE,
+                                   sampling = "down")
+```
+
+### Logisitic f1, backwards selected
+
+```{r}
+final_logistic_f1_backwards <- glm(f1,
+                                   historical_data,
+                                   family = "binomial") 
+final_logistic_f1_backwards <- step(final_logistic_f1_backwards)
+write_rds(final_logistic_f1_backwards, "../models/final_logistic_f1_backwards.rds")
+```
+
+### Lasso f1, logloss, with downsampling
+
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 1,
+                         lambda = 10^seq(-3, -1, length = 10))
+
+set.seed(825)
+final_lasso_f1_logloss_downsampled <- train(f1, 
+                                            data = historical_data, 
+                                            method = "glmnet", 
+                                            metric = "mnLogLoss",
+                                            tuneGrid = par_grid,
+                                            trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(final_lasso_f1_logloss_downsampled, "../models/final_lasso_f1_logloss_downsampled.rds")
+```
+
+### Ridge f1, logloss, with downsampling
+
+```{r}
+par_grid <-  expand.grid(alpha = 0,
+                         lambda = seq(3.5e-8, 3.5e7,
+                                      length.out = 8))
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+set.seed(825)
+final_ridge_f1_logloss_downsampled <- train(f1, 
+                                            data = historical_data, 
+                                            method = "glmnet",
+                                            metric = "logLoss",
+                                            tuneGrid = par_grid,
+                                            trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(final_ridge_f1_logloss_downsampled, "../models/final_ridge_f1_logloss_downsampled.rds")
+```
