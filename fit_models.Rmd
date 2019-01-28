@@ -62,21 +62,64 @@ f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
   cumulative_above_5
 ```
 
+The third is like the first but swaps in two of the z-scored temps for the PCA temp.
+
+```{r}
+fz <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + 
+    log_schmidt + cumulative_above_10 + ice_duration + population + 
+    lon + lat + season + mean_surf_z + mean_bot_z
+```
+
+
 
 ## Set up params for parameter selection
 
 ```{r}
 control_logloss <- trainControl(method = "repeatedcv",
                                 number = 5,
-                                repeats = 2,
+                                repeats = 5,
                                 summaryFunction = mnLogLoss,
                                 classProbs = TRUE)
 control_logloss_ds <- trainControl(method = "repeatedcv",
                                    number = 5,
-                                   repeats = 3,
+                                   repeats = 5,
                                    summaryFunction = mnLogLoss,
                                    classProbs = TRUE,
                                    sampling = "down")
+```
+
+
+
+## Logistic
+
+### f1, backwards selected
+
+```{r}
+logistic_f1_backwards <- glm(f1,
+                             training,
+                             family = "binomial") 
+logistic_f1_backwards <- step(logistic_f1_backwards)
+write_rds(logistic_f1_backwards, "../models/logistic_f1_backwards.rds")
+```
+
+### f2, backwards selected
+
+```{r}
+logistic_f2_backwards <- glm(f2,
+                             training,
+                             family = "binomial") 
+logistic_f2_backwards <- step(logistic_f2_backwards)
+write_rds(logistic_f2_backwards, "../models/logistic_f2_backwards.rds")
+```
+
+### fz, backwards selected
+
+```{r}
+logistic_fz_backwards <- glm(fz,
+                             training,
+                             family = "binomial")
+logistic_fz_backwards <- step(logistic_fz_backwards)
+write_rds(logistic_fz_backwards, "../models/logistic_fz_backwards.rds")
 ```
 
 
@@ -166,6 +209,27 @@ lasso_f2_logloss_downsampled <- train(f2,
                                       trControl = control_logloss_ds)
 stopCluster(cl)
 write_rds(lasso_f2_logloss_downsampled, "../models/lasso_f2_logloss_downsampled.rds")
+```
+
+### fz, logloss, downsampled
+
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+#par_grid <-  expand.grid(alpha = 1,
+                        # lambda = seq(1.5e-6, 1e-5, 
+                        #              length.out = 6))
+
+set.seed(825)
+lasso_fz_logloss_downsampled <- train(fz, 
+                                      data = training, 
+                                      method = "glmnet", 
+                                      metric = "mnLogLoss",
+                                      #tuneGrid = par_grid,
+                                      trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(lasso_fz_logloss_downsampled, "../models/lasso_fz_logloss_downsampled.rds")
 ```
 
 
