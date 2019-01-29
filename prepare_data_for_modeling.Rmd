@@ -4,6 +4,12 @@ date: "1/23/2019"
 output: html_document
 ---
 
+```{r}
+library(tidyverse)
+library(caret)
+```
+
+
 This file serves as a second pass at data processing with the aim to prepare and standardize the data that will be used to fit the various models.
 
 ### Load
@@ -17,7 +23,10 @@ historical_data <- read_csv("historical_data.csv",
                                              season = col_character(),
                                              summerkill = col_character(),
                                              ice_duration = col_double())) %>%
-  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill)
+  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill) %>%
+  mutate(summerkill = fct_recode(summerkill,
+                                 "neg" = "0",
+                                 "pos" = "1"))
 
 future_data <- read_csv("future_data.csv",
                         col_types = list(wbic = col_character(),
@@ -33,15 +42,9 @@ future_data <- read_csv("future_data.csv",
 set.seed(998)
 in_training <- createDataPartition(historical_data$summerkill,
                                   p = .75, list = FALSE)
-training <- historical_data %>%
-  mutate(summerkill = fct_recode(summerkill,
-                                 "neg" = "0",
-                                 "pos" = "1")) %>%
+training <- historical_data  %>%
   slice(in_training)
 testing  <- historical_data %>%
-  mutate(summerkill = fct_recode(summerkill,
-                                 "neg" = "0",
-                                 "pos" = "1")) %>%
   slice(-in_training)
 ```
 
@@ -56,7 +59,9 @@ testing  <- predict(pre_proc_values, testing) %>%
                              levels = c("pos", "neg"), 
                              ordered = TRUE),
          year = as.integer(year))
-future  <- predict(pre_proc_values, future_data) %>%
+
+pre_proc_values_full_hist <- preProcess(historical_data, method = c("center", "scale"))
+future  <- predict(pre_proc_values_full_hist, future_data) %>%
   mutate(year = as.integer(year))
 ```
 
