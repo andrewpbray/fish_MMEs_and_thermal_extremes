@@ -1,54 +1,8 @@
 # Load packages
 library(tidyverse)
-library(ggthemes)
-library(ggmap)
-library(gridExtra)
-library(scales)
-library(car)
-library(DescTools)
-library(spdep)
 library(patchwork)
 
-# Load data
-setwd("../data/processed/")
-historical_data <- read_csv("historical_data.csv",
-                            col_types = list(ice_duration = col_double()))
-
-future <- read_csv("../prepared_for_modeling/future.csv",
-                        col_types = list(ice_duration = col_double()))
-
-lasso_f1_logloss             <- read_rds("../models/lasso_f1_logloss.rds")
-lasso_f1_logloss_downsampled <- read_rds("../data/models/lasso_f1_logloss_downsampled.rds")
-re_f1                        <- read_rds("../data/models/re_f1.rds")
-
-future_data$ice_duration <- mean(historical_data$ice_duration)
-
-
-# Stand-in model
-m1 <- glm(summerkill ~ temp,
-          data =  historical_data,
-          family = binomial)
-
-
-# Extract predictions
-predictions <- predict(object = m1, 
-                       newdata = future_data, 
-                       type = "response")
-
-predictions <- predict(object = lasso_f1_logloss, 
-                       newdata = future, 
-                       type = "prob")$pos
-
-predictions <- predict(object = lasso_f1_logloss_downsampled, 
-                       newdata = future_data, 
-                       type = "prob")$pos
-
-predictions <- predict(object = re_f1, 
-                       newdata = future_data, 
-                       type = "response")
-
-
-# Function to compute prediction interval via simulation
+# Load function to compute prediction interval via simulation
 compute_quantile <- function(x, q, reps = 1000) {
   x %>%
     map_dfc( ~ rbinom(reps, 1, prob = .x)) %>%
@@ -56,14 +10,38 @@ compute_quantile <- function(x, q, reps = 1000) {
     quantile(q)
 }
 
+# Load data and model
+setwd("../data/processed")
+historical_data <- read_csv("historical_data.csv",
+                            col_types = list(wbic = col_character(),
+                                             month  = col_character(),
+                                             season = col_character(),
+                                             summerkill = col_character(),
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill) %>%
+  mutate(summerkill = fct_recode(as.factor(summerkill),
+                                 "neg" = "0",
+                                 "pos" = "1"))
+
+setwd("../prepared_for_modeling")
+future <- read_csv("future.csv",
+                   col_types = list(ice_duration = col_double()))
+setwd("../models")
+predictive_model <- read_rds("predictive_lasso.rds")
+
+# Extract predictions
+predictions <- predict(object = predictive_model,
+                       newdata = future, 
+                       type = "prob")$pos
+
 # Prepare data for plot
 f_data <- future %>%
   add_column(prob = predictions) %>%
   group_by(year) %>%
   summarize(temp       = mean(mean_surf),
             kills      = sum(prob),
-            lb_kill    = compute_quantile(prob, q = .025, reps = 300),
-            ub_kill    = compute_quantile(prob, q = .975, reps = 300)
+            lb_kill    = compute_quantile(prob, q = .025, reps = 100),
+            ub_kill    = compute_quantile(prob, q = .975, reps = 100)
             ) 
 
 f_early <- f_data %>%
@@ -82,7 +60,7 @@ hist_data <- historical_data %>%
   filter(year < 2014) %>%
   group_by(year) %>%
   summarize(temp = mean(mean_surf),
-            kills = sum(summerkill == 1)) %>%
+            kills = sum(summerkill == "pos")) %>%
   mutate(kills_smooth = loess(kills ~ year, .)$fitted)
 
 gap_data <- tibble(year = c(2014:2040, 2060:2080))
