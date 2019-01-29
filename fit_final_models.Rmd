@@ -109,3 +109,48 @@ final_ridge_f1_logloss_downsampled <- train(f1,
 stopCluster(cl)
 write_rds(final_ridge_f1_logloss_downsampled, "../models/final_ridge_f1_logloss_downsampled.rds")
 ```
+
+### Final predictive model
+
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 1,
+                         lambda = 10^seq(-3, -1, length = 10))
+
+set.seed(825)
+predictive_lasso <- train(summerkill ~ variance_after_ice_30 + 
+                            variance_after_ice_60 + log_schmidt +
+                            cumulative_above_10 + population + 
+                            lon + lat + season + temp, 
+                          data = historical_data, 
+                          method = "glmnet", 
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss_ds)
+stopCluster(cl)
+# Adjust intercept to account for downsampling
+# https://stats.stackexchange.com/questions/67903/does-down-sampling-change-logistic-regression-coefficients
+prev <- mean(historical_data$summerkill == "pos")
+ind_opt <- which.min(abs(predictive_lasso$finalModel$lambda -
+                           predictive_lasso$finalModel$lambdaOpt))
+predictive_lasso$finalModel$a0[ind_opt] <- predictive_lasso$finalModel$a0[ind_opt] - 
+  log(((1 - prev)/prev)*(1))
+write_rds(predictive_lasso, "../models/predictive_lasso.rds")
+```
+
+```{r}
+ind_opt <- which.min(abs(predictive_lasso$finalModel$lambda -
+                           predictive_lasso$finalModel$lambdaOpt))
+a$a0[31]
+a$lambda[31]
+sum(predict(a, future, type = "prob")$pos)
+
+b <- a
+prev <- mean(historical_data$summerkill == "pos")
+b$finalModel$a0["s30"] <- a$finalModel$a0["s30"] - 
+  log(((1 - prev)/prev)*(1))
+sum(predict(b, future, type = "prob")$pos)
+```
+
