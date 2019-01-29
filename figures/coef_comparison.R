@@ -57,10 +57,12 @@ p1 <- final_models %>%
   geom_col(show.legend = FALSE) +
   facet_wrap(~ name, ncol = 3) +
   coord_flip() +
-  labs(x = NULL) +
+  labs(x = NULL,
+       y = "Coefficient estimate") +
   theme_bw() +
   theme(strip.background = element_rect(colour = "black", fill = "white"))
 
-ggsave(p1, "coef_comparison.png", height = 3, width = 8)
+setwd("../../figures") 
+ggsave("coef_comparison.png", p1, height = 3, width = 8)
 
 
