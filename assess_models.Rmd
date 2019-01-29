@@ -163,6 +163,7 @@ extract_coef <- function(model, name) {
       filter(term != "(Intercept)") %>%
       select(term, estimate)
   }
+  out
 }
 
 all_models <- all_models %>%
