@@ -89,6 +89,31 @@ final_lasso_f1_logloss_downsampled <- train(f1,
                                             tuneGrid = par_grid,
                                             trControl = control_logloss_ds)
 stopCluster(cl)
+write_rds(final_lasso_f1_logloss_downsampled, "../models/final_lasso_f1_logloss.rds")
+```
+
+
+# Lasso f1, logloss, no downsampling
+```{r}
+control_logloss_ds <- trainControl(method = "repeatedcv",
+                                   number = 5,
+                                   repeats = 5,
+                                   summaryFunction = twoClassSummary,
+                                   classProbs = TRUE)
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 1,
+                         lambda = 10^seq(-3, -1, length = 10))
+
+set.seed(825)
+final_lasso_f1_logloss_downsampled <- train(f1, 
+                                            data = historical_data, 
+                                            method = "glmnet", 
+                                            metric = "roc-auc",
+                                            tuneGrid = par_grid,
+                                            trControl = control_logloss_ds)
+stopCluster(cl)
 write_rds(final_lasso_f1_logloss_downsampled, "../models/final_lasso_f1_logloss_downsampled.rds")
 ```
 
@@ -117,7 +142,7 @@ cl <- makePSOCKcluster(4)
 registerDoParallel(cl)
 
 par_grid <-  expand.grid(alpha = 1,
-                         lambda = 10^seq(-3, -1, length = 10))
+                         lambda = seq(.01, .04, length.out = 6))
 
 set.seed(825)
 predictive_lasso <- train(summerkill ~ variance_after_ice_30 + 
@@ -132,25 +157,137 @@ predictive_lasso <- train(summerkill ~ variance_after_ice_30 +
 stopCluster(cl)
 # Adjust intercept to account for downsampling
 # https://stats.stackexchange.com/questions/67903/does-down-sampling-change-logistic-regression-coefficients
-prev <- mean(historical_data$summerkill == "pos")
-ind_opt <- which.min(abs(predictive_lasso$finalModel$lambda -
-                           predictive_lasso$finalModel$lambdaOpt))
-predictive_lasso$finalModel$a0[ind_opt] <- predictive_lasso$finalModel$a0[ind_opt] - 
-  log(((1 - prev)/prev)*(1))
-write_rds(predictive_lasso, "../models/predictive_lasso.rds")
 ```
 
-```{r}
-ind_opt <- which.min(abs(predictive_lasso$finalModel$lambda -
-                           predictive_lasso$finalModel$lambdaOpt))
-a$a0[31]
-a$lambda[31]
-sum(predict(a, future, type = "prob")$pos)
 
-b <- a
+
+
+# A: remove season, correct ps
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 1,
+                         lambda = seq(.01, .04, length.out = 6))
+
+set.seed(825)
+m <- train(summerkill ~ variance_after_ice_30 + 
+                            variance_after_ice_60 + log_schmidt +
+                            cumulative_above_10 + population + 
+                            lon + lat + temp, 
+                          data = historical_data, 
+                          method = "glmnet", 
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(m, "../models/predictive_lasso_A.rds")
+```
+
+# B: remove season, correct b0
+```{r}
 prev <- mean(historical_data$summerkill == "pos")
-b$finalModel$a0["s30"] <- a$finalModel$a0["s30"] - 
-  log(((1 - prev)/prev)*(1))
-sum(predict(b, future, type = "prob")$pos)
+n_1 <- 77 #sum(historical_data$summerkill == "pos")
+n_0 <- 77 #sum(historical_data$summerkill == "neg")
+ind_opt <- which.min(abs(m$finalModel$lambda -
+                           m$finalModel$lambdaOpt))
+m$finalModel$a0[ind_opt] <- m$finalModel$a0[ind_opt] - 
+  log(((1 - prev)/prev)*(n_1/n_0))
+write_rds(m, "../models/predictive_lasso_B.rds")
+```
+
+# C: Correct ps
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 1,
+                         lambda = seq(.01, .04, length.out = 6))
+
+set.seed(825)
+m <- train(summerkill ~ variance_after_ice_30 + 
+                            variance_after_ice_60 + log_schmidt +
+                            cumulative_above_10 + population + 
+                            lon + lat + season + temp, 
+                          data = historical_data, 
+                          method = "glmnet", 
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss_ds)
+stopCluster(cl)
+write_rds(m, "../models/predictive_lasso_C.rds")
+```
+
+# D: Correct B0
+```{r}
+prev <- mean(historical_data$summerkill == "pos")
+n_1 <- 77 #sum(historical_data$summerkill == "pos")
+n_0 <- 77 #sum(historical_data$summerkill == "neg")
+ind_opt <- which.min(abs(m$finalModel$lambda -
+                           m$finalModel$lambdaOpt))
+m$finalModel$a0[ind_opt] <- m$finalModel$a0[ind_opt] - 
+  log(((1 - prev)/prev)*(n_1/n_0))
+write_rds(m, "../models/predictive_lasso_D.rds")
+```
+
+# E: Final ridge f1 logloss
+```{r}
+control_logloss <- trainControl(method = "repeatedcv",
+                                   number = 5,
+                                   repeats = 3,
+                                   summaryFunction = mnLogLoss,
+                                   classProbs = TRUE)
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+par_grid <-  expand.grid(alpha = 0,
+                         lambda = 10^seq(-3, -1, length = 8))
+
+set.seed(825)
+predictive_lasso <- train(summerkill ~ variance_after_ice_30 + 
+                            variance_after_ice_60 + log_schmidt +
+                            cumulative_above_10 + population + 
+                            lon + lat + season + temp, 
+                          data = historical_data, 
+                          method = "glmnet", 
+                          metric = "logLoss",
+                          tuneGrid = par_grid,
+                          trControl = control_logloss)
+stopCluster(cl)
+write_rds(predictive_lasso, "../models/predictive_lasso_E.rds")
+```
+
+# F Lasso fit with cv.glmnet
+
+```{r}
+library(doMC)
+registerDoMC(cores = 4)
+
+X <- model.matrix(summerkill ~ variance_after_ice_30 + 
+                    variance_after_ice_60 + log_schmidt +
+                    cumulative_above_10 + population + 
+                    lon + lat + season + temp, 
+                  data = historical_data)
+model <- cv.glmnet(X, historical_data$summerkill,
+                   lambda = 10^seq(-5, -1, length.out = 20),
+  family = "binomial",
+    type.measure = "auc",
+  parallel = TRUE, 
+  keep = TRUE,
+  alpha = 0
+)
+
+X <- model.matrix(summerkill ~ variance_after_ice_30 + 
+                    variance_after_ice_60 + log_schmidt +
+                    cumulative_above_10 + population + 
+                    lon + lat + temp, 
+                  data = historical_data)
+model2 <- cv.glmnet(X, historical_data$summerkill,
+                   lambda = 10^seq(-8, -1, length.out = 12),
+  family = "binomial",
+  parallel = TRUE, 
+  keep = TRUE
+)
+write_rds(model, "../models/predictive_lasso_F.rds")
 ```
 
