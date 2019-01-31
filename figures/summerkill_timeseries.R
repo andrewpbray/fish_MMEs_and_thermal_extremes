@@ -2,7 +2,7 @@
 library(tidyverse)
 library(patchwork)
 
-# Load function to compute prediction interval via simulation
+# Load functions to compute prediction interval via simulation
 compute_quantile <- function(x, q, reps = 1000) {
   x %>%
     map_dfc( ~ rbinom(reps, 1, prob = .x)) %>%
@@ -25,7 +25,7 @@ historical_data <- read_csv("historical_data.csv",
 future_data <- read_csv('future_data.csv')
 
 # Lasso selected logistic model
-m1 <- glm(summerkill ~ temp + population + lat,
+m1 <- glm(summerkill ~ temp + population + lat + season,
           data =  historical_data,
           family = binomial)
 
@@ -34,14 +34,15 @@ p <- predict(object = m1,
              type = "response")
 
 # Prepare data for plot
+set.seed(3318)
 f_data <- future_data %>%
   add_column(prob = p) %>%
   group_by(year) %>%
   summarize(temp       = mean(mean_surf),
             kills      = sum(prob),
-            lb_kill    = compute_quantile(prob, q = .025, reps = 500),
-            ub_kill    = compute_quantile(prob, q = .975, reps = 500)
-            ) 
+            lb_kill    = compute_quantile(prob, q = .025, reps = 1000),
+            ub_kill    = compute_quantile(prob, q = .975, reps = 1000),
+            draw_kills = sum(map_int(prob, ~rbinom(1, 1, .x))))
 
 f_early <- f_data %>%
   filter(year < 2075) %>%
@@ -71,6 +72,7 @@ full_data <- f_early %>%
 p_timeseries <- ggplot(full_data, aes(x = year)) +
   geom_point(aes(y = kills_obs)) +
   geom_ribbon(aes(ymin = lb_smooth, ymax = ub_smooth), fill = "steelblue", alpha = .2) +
+  geom_point(aes(y = draw_kills), color = "steelblue") +
   geom_line(aes(y = kills_smooth)) +
   annotate("rect", xmin = 2014, xmax = 2041, ymin = 0, ymax = 35, fill = "gray", alpha = .15) +
   annotate("rect", xmin = 2059, xmax = 2080, ymin = 0, ymax = 35, fill = "gray", alpha = .15) +
