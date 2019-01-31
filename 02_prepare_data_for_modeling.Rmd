@@ -10,7 +10,9 @@ library(caret)
 ```
 
 
-This file serves as a second pass at data processing with the aim to prepare and standardize the data that will be used to fit the various models.
+This file serves as a second pass at data processing with the aim to prepare data for
+subsequent model fitting. The two primary steps carried out here is to partition the
+data into training and testing sets and to scale them to allow for coefficient comparison.
 
 ### Load
 
