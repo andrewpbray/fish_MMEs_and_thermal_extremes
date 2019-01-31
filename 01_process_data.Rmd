@@ -4,6 +4,22 @@ author: "Aaron Till and Andrew Bray"
 output: github_document
 --- 
 
+This document reads in several files, cleans them, and merges them into two primary
+data files: a historical data set (thermal metrics and MME info pre-2014) and a future
+data set (thermal metrics forcast over two periods in the 21st century). The raw files
+include:
+
+- `fill_kill_data_10_24_2018.csv`: data on MME events in Wisconsin lakes between 2003 and 2013.
+- `thermal_metrics.csv`: historical thermal metric data on upper midwest lakes between 1980 and 2013 from Winslow et al.
+- `ACCESS_thermal_metrics.tsv`: forcasted thermal metric data for upper midwest lakes for two periods in the 21st century.
+- `NHD_WBIC.csv`: reference table to match lake ids (wbic) with site ids (some lakes have multiple sites).
+- `lake_shapes`: shapefiles of wisconsin lakes (provide lat/lon).
+- `census_data`: census data files to match population estimates to each lake via lat/lon.
+- `PRISM_precip`: snow and precipitation data.
+
+Some of the files are several GB in size, so it recommended that this be run on
+a machine with > 20GB RAM.
+
 # Part I: Historical Data
 
 ## Data import
