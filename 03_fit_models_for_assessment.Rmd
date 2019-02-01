@@ -1,8 +1,11 @@
 ---
-title: "Fit Models"
-author: "Aaron Till and Andrew Bray"
+title: "Fit Models for Assessment"
 output: html_document
 ---
+
+We consider four primary model families: logistic regression, ridge regression,
+lasso regression, and logistic regression with random effects. Models are fit
+to the training data set only.
 
 ```{r}
 library(tidyverse)
@@ -62,17 +65,8 @@ f2 <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + log_schmidt +
   cumulative_above_5
 ```
 
-The third is like the first but swaps in two of the z-scored temps for the PCA temp.
 
-```{r}
-fz <- summerkill ~ variance_after_ice_30 + variance_after_ice_60 + 
-    log_schmidt + cumulative_above_10 + ice_duration + population + 
-    lon + lat + season + mean_surf_z + mean_bot_z
-```
-
-
-
-## Set up params for parameter selection
+## Set up params for ridge and lasso lambda selection
 
 ```{r}
 control_logloss <- trainControl(method = "repeatedcv",
@@ -99,7 +93,7 @@ logistic_f1_backwards <- glm(f1,
                              training,
                              family = "binomial") 
 logistic_f1_backwards <- step(logistic_f1_backwards)
-write_rds(logistic_f1_backwards, "../models/logistic_f1_backwards.rds")
+write_rds(logistic_f1_backwards, "../models/assessment/logistic_f1_backwards.rds")
 ```
 
 ### f2, backwards selected
@@ -109,26 +103,18 @@ logistic_f2_backwards <- glm(f2,
                              training,
                              family = "binomial") 
 logistic_f2_backwards <- step(logistic_f2_backwards)
-write_rds(logistic_f2_backwards, "../models/logistic_f2_backwards.rds")
-```
-
-### fz, backwards selected
-
-```{r}
-logistic_fz_backwards <- glm(fz,
-                             training,
-                             family = "binomial")
-logistic_fz_backwards <- step(logistic_fz_backwards)
-write_rds(logistic_fz_backwards, "../models/logistic_fz_backwards.rds")
+write_rds(logistic_f2_backwards, "../models/assessment/logistic_f2_backwards.rds")
 ```
 
 
 ## Lasso Logistic
 
-We first fit LASSO models with many difference lambdas, utilizing a 5-fold CV
-scheme, repeated once, on the training data.
+We first fit LASSO models with many differenct lambdas, utilizing a 5-fold CV
+scheme, repeated five times, on the training data.
 
 ### f1, logloss, no downsampling
+
+Note: suffers from unidentifiability in lambda.
 
 ```{r}
 cl <- makePSOCKcluster(6)
@@ -146,7 +132,7 @@ lasso_f1_logloss <- train(f1,
                      tuneGrid = par_grid,
                      trControl = control_logloss)
 stopCluster(cl)
-write_rds(lasso_f1_logloss, "../models/lasso_f1_logloss.rds")
+write_rds(lasso_f1_logloss, "../models/assessment/lasso_f1_logloss.rds")
 ```
 
 ### f1, logloss, with downsampling
@@ -166,10 +152,12 @@ lasso_f1_logloss_downsampled <- train(f1,
                                       tuneGrid = par_grid,
                                       trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(lasso_f1_logloss_downsampled, "../models/lasso_f1_logloss_downsampled.rds")
+write_rds(lasso_f1_logloss_downsampled, "../models/assessment/lasso_f1_logloss_downsampled.rds")
 ```
 
 ### f2, logloss, no downsampling
+
+Note: suffers from unidentifiability in lambda.
 
 ```{r}
 cl <- makePSOCKcluster(6)
@@ -187,7 +175,7 @@ lasso_f2_logloss <- train(f2,
                      #tuneGrid = par_grid,
                      trControl = control_logloss)
 stopCluster(cl)
-write_rds(lasso_f2_logloss, "../models/lasso_f2_logloss.rds")
+write_rds(lasso_f2_logloss, "../models/assessment/lasso_f2_logloss.rds")
 ```
 
 ### f2, logloss, downsampled
@@ -208,34 +196,15 @@ lasso_f2_logloss_downsampled <- train(f2,
                                       #tuneGrid = par_grid,
                                       trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(lasso_f2_logloss_downsampled, "../models/lasso_f2_logloss_downsampled.rds")
-```
-
-### fz, logloss, downsampled
-
-```{r}
-cl <- makePSOCKcluster(4)
-registerDoParallel(cl)
-
-#par_grid <-  expand.grid(alpha = 1,
-                        # lambda = seq(1.5e-6, 1e-5, 
-                        #              length.out = 6))
-
-set.seed(825)
-lasso_fz_logloss_downsampled <- train(fz, 
-                                      data = training, 
-                                      method = "glmnet", 
-                                      metric = "mnLogLoss",
-                                      #tuneGrid = par_grid,
-                                      trControl = control_logloss_ds)
-stopCluster(cl)
-write_rds(lasso_fz_logloss_downsampled, "../models/lasso_fz_logloss_downsampled.rds")
+write_rds(lasso_f2_logloss_downsampled, "../models/assessment/lasso_f2_logloss_downsampled.rds")
 ```
 
 
 ## Ridge logistic
 
 ### f1, logloss, no downsampling
+
+Note: suffers from unidentifiability in lambda.
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
@@ -251,7 +220,7 @@ ridge_f1_logloss <- train(f1,
                           tuneGrid = par_grid,
                           trControl = control_logloss)
 stopCluster(cl)
-write_rds(ridge_f1_logloss, "../models/ridge_f1_logloss.rds")
+write_rds(ridge_f1_logloss, "../models/assessment/ridge_f1_logloss.rds")
 ```
 
 ### f1, logloss, with downsampling
@@ -270,7 +239,7 @@ ridge_f1_logloss_downsampled <- train(f1,
                                       tuneGrid = par_grid,
                                       trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(ridge_f1_logloss_downsampled, "../models/ridge_f1_logloss_downsampled.rds")
+write_rds(ridge_f1_logloss_downsampled, "../models/assessment/ridge_f1_logloss_downsampled.rds")
 ```
 
 ### f2, logloss, with downsampling
@@ -290,11 +259,12 @@ ridge_f2_logloss_downsampled <- train(f2,
                                       tuneGrid = par_grid,
                                       trControl = control_logloss_ds)
 stopCluster(cl)
-write_rds(ridge_f2_logloss_downsampled, "../models/ridge_f2_logloss_downsampled.rds")
+write_rds(ridge_f2_logloss_downsampled, "../models/assessment/ridge_f2_logloss_downsampled.rds")
 ```
 
 ### f2, logloss, without downsampling
-### No apparent optimal model
+
+Note: suffers from unidentifiability in lambda.
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
@@ -311,7 +281,7 @@ ridge_f2_logloss <- train(f2,
                           tuneGrid = par_grid,
                           trControl = control_logloss)
 stopCluster(cl)
-write_rds(ridge_f2_logloss, "../models/ridge_f2_logloss.rds")
+write_rds(ridge_f2_logloss, "../models/assessment/ridge_f2_logloss.rds")
 ```
 
 
@@ -337,5 +307,5 @@ m1 <- lmer(f1_re,
           control = glmerControl(optimizer ='optimx',
                            optCtrl=list(method='L-BFGS-B')))
 
-write_rds(re_f1, "../models/re_f1.rds")
+write_rds(re_f1, "../models/assessment/re_f1.rds")
 ```
