@@ -4,6 +4,9 @@ author: "Aaron Till and Andrew Bray"
 output: html_document
 ---
 
+Candidate models are compared in terms of their coefficients to check for sensitivity of the coefficients to modeling choices, and their out-of-sample predictive performance, assessed using logloss
+and ROC-AUC.
+
 ```{r}
 library(tidyverse)
 library(caret)
@@ -39,7 +42,7 @@ testing <- read_csv("testing.csv",
 ## Load models
 
 ```{r}
-setwd("../models") 
+setwd("../models/assessment") 
 model_names <- list.files()
 all_models <- model_names %>%
   map(., ~read_rds(.x))
@@ -76,9 +79,9 @@ for (i in 1:nrow(all_models)) {
   logloss[i] <- mn_log_loss(a, truth, fit_test)$.estimate
 }
 
-all_models <- all_models %>%
+all_models %>%
   add_column(auc, logloss) %>%
-  arrange(logloss, auc)
+  arrange(desc(auc), logloss)
 ```
 
 ## Coefficients
@@ -125,7 +128,7 @@ all_models %>%
              y = estimate, 
              fill = estimate > 0)) +
   geom_col(show.legend = FALSE) +
-  facet_wrap(~ name, ncol = 2) +
+  facet_wrap(~ name, ncol = 4) +
   coord_flip() +
   labs(x = NULL) +
   theme_bw()
