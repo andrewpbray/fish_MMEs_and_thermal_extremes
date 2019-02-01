@@ -10,10 +10,18 @@ library(spdep)
 library(rgdal)
 
 # Load data
-historical_data <- read_csv('../data/processed/historical_data.csv',
-                            col_types = list(wbic = col_character()))
-future_data     <- read_csv('../data/processed/future_data.csv',
-                            col_types = list(wbic = col_character()))
+historical_data <- read_csv("../data/processed/historical_data.csv",
+                            col_types = list(wbic = col_character(),
+                                             month  = col_character(),
+                                             season = col_character(),
+                                             summerkill = col_character(),
+                                             ice_duration = col_double())) %>%
+  select(-cause.category.4, -anthropogenic, -infectious, -unknown, -winterkill) %>%
+  mutate(summerkill = fct_recode(as.factor(summerkill),
+                                 "neg" = "0",
+                                 "pos" = "1"))
+future_data <- read_csv('../data/processed/future_data.csv',
+                        col_types = list(wbic = col_character()))
 
 # Load and process map data
 dsn2 <- "../data/raw/wisconsin_outline"
@@ -34,7 +42,7 @@ p_event <- predict(object = m1,
 
 # Combine data for plot
 hist_data <- historical_data %>%
-  mutate(prob = summerkill) %>%
+  mutate(prob = ifelse(summerkill == "pos", 1, 0)) %>%
   select(wbic, lat, lon, prob) %>%
   group_by(wbic, lat, lon) %>%
   summarize(prob = sum(prob)) %>%
@@ -45,7 +53,7 @@ fut_data <- future_data %>%
   select(wbic, year, lat, lon) %>%
   add_column(p_event) %>%
   mutate(p_no_event = 1 - p_event,
-         generation = ifelse(year > 2070, "Late 21st Century", "Early 21st Century")) %>%
+         generation = ifelse(year > 2070, "Late 21st Century", "Mid 21st Century")) %>%
   group_by(wbic, generation) %>%
   summarise(prob = (1 - prod(p_no_event)), 
             lon = mean(lon), 
@@ -55,7 +63,7 @@ map_event_data <- hist_data %>%
   bind_rows(fut_data) %>%
   arrange(prob) %>%
   mutate(generation = factor(generation, levels = c("Historical",
-                                                    "Early 21st Century",
+                                                    "Mid 21st Century",
                                                     "Late 21st Century")))
 
 # Construct map
@@ -74,7 +82,8 @@ map <- ggmap(wisconsin_map) +
                                 barwidth = .8)) +
   labs(x = "Longitude",
        y = "Latitude",
-       color = "Probability")
+       color = "Probability") +
+  theme(panel.border = element_rect(size = 1.2, fill = NA))
 
 map
 
