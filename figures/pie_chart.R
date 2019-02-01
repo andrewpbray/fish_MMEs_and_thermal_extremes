@@ -9,7 +9,14 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data <- read_csv('../data/processed/historical_data.csv')
+#historical_data <- read_csv('../data/processed/historical_data.csv')
+historical_data_old <- read_csv("../data/processed/historical_data.csv",
+         col_types = list(wbic = col_character(),
+                          year = col_character(),
+                          month  = col_character(),
+                          season = col_character(),
+                          summerkill = col_character(),
+                          ice_duration = col_double()))
 
 fig_S1_data <- historical_data_old %>%
   filter(!is.na(cause.category.4)) %>%
@@ -27,7 +34,8 @@ fig_S1_data <-  fig_S1_data %>%
     arrange(count)
 
 fig_S1_data$pos = (cumsum(c(0, fig_S1_data$count)) + c(fig_S1_data$count / 2, .01))[1:nrow(fig_S1_data)]
-   
+
+pal <- wes_palette("Darjeeling1")
 pie <- fig_S1_data %>%
  ggplot(aes(x = "", y = count, fill = cause.category.4))+ 
       geom_bar(width = 1, stat = 'identity') +
