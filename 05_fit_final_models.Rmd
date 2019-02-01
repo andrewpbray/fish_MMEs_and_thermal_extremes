@@ -62,14 +62,14 @@ control_logloss_ds <- trainControl(method = "repeatedcv",
                                    sampling = "down")
 ```
 
-### Logisitic f1, backwards selected
+### Logisitic f1
 
 ```{r}
-final_logistic_f1_backwards <- glm(f1,
-                                   historical_data,
-                                   family = "binomial") 
-final_logistic_f1_backwards <- step(final_logistic_f1_backwards)
-write_rds(final_logistic_f1_backwards, "../models/final_logistic_f1_backwards.rds")
+final_logistic_f1 <- glm(f1,
+                         historical_data,
+                         family = "binomial") 
+#final_logistic_f1_backwards <- step(final_logistic_f1_backwards)
+write_rds(final_logistic_f1, "../models/final_logistic_f1.rds")
 ```
 
 ### Lasso f1, logloss, with downsampling
@@ -85,7 +85,7 @@ set.seed(825)
 final_lasso_f1_logloss_downsampled <- train(f1, 
                                             data = historical_data, 
                                             method = "glmnet", 
-                                            metric = "mnLogLoss",
+                                            metric = "logLoss",
                                             tuneGrid = par_grid,
                                             trControl = control_logloss_ds)
 stopCluster(cl)
@@ -93,35 +93,11 @@ write_rds(final_lasso_f1_logloss_downsampled, "../models/final_lasso_f1_logloss.
 ```
 
 
-# Lasso f1, logloss, no downsampling
-```{r}
-control_logloss_ds <- trainControl(method = "repeatedcv",
-                                   number = 5,
-                                   repeats = 5,
-                                   summaryFunction = twoClassSummary,
-                                   classProbs = TRUE)
-cl <- makePSOCKcluster(4)
-registerDoParallel(cl)
-
-par_grid <-  expand.grid(alpha = 1,
-                         lambda = 10^seq(-3, -1, length = 10))
-
-set.seed(825)
-final_lasso_f1_logloss_downsampled <- train(f1, 
-                                            data = historical_data, 
-                                            method = "glmnet", 
-                                            metric = "roc-auc",
-                                            tuneGrid = par_grid,
-                                            trControl = control_logloss_ds)
-stopCluster(cl)
-write_rds(final_lasso_f1_logloss_downsampled, "../models/final_lasso_f1_logloss_downsampled.rds")
-```
-
 ### Ridge f1, logloss, with downsampling
 
 ```{r}
 par_grid <-  expand.grid(alpha = 0,
-                         lambda = 10^seq(-3, -1, length = 10))
+                         lambda = 10^seq(-1.7, -1.3, length = 10))
 cl <- makePSOCKcluster(4)
 registerDoParallel(cl)
 set.seed(825)
@@ -135,7 +111,7 @@ stopCluster(cl)
 write_rds(final_ridge_f1_logloss_downsampled, "../models/final_ridge_f1_logloss_downsampled.rds")
 ```
 
-### Final predictive model
+### Predictive model
 
 ```{r}
 cl <- makePSOCKcluster(4)
@@ -145,7 +121,7 @@ par_grid <-  expand.grid(alpha = 1,
                          lambda = seq(.01, .04, length.out = 6))
 
 set.seed(825)
-predictive_lasso <- train(summerkill ~ variance_after_ice_30 + 
+predictive_logistic <- train(summerkill ~ variance_after_ice_30 + 
                             variance_after_ice_60 + log_schmidt +
                             cumulative_above_10 + population + 
                             lon + lat + season + temp, 
@@ -155,8 +131,7 @@ predictive_lasso <- train(summerkill ~ variance_after_ice_30 +
                           tuneGrid = par_grid,
                           trControl = control_logloss_ds)
 stopCluster(cl)
-# Adjust intercept to account for downsampling
-# https://stats.stackexchange.com/questions/67903/does-down-sampling-change-logistic-regression-coefficients
+
 ```
 
 
