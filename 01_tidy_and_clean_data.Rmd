@@ -8,7 +8,7 @@ data files: a historical data set (thermal metrics and MME info pre-2014) and a 
 data set (thermal metrics forcast over two periods in the 21st century). The raw files
 include:
 
-- `fill_kill_data_10_24_2018.csv`: data on MME events in Wisconsin lakes between 2003 and 2013.
+- `fill_kill_data_10_24_2018.csv`: fishkills reported to the Wisconsin Department of Natural Resources (WDNR) between 1988 and early 2014.
 - `thermal_metrics.csv`: historical thermal metric data on upper midwest lakes between 1980 and 2013 from Winslow et al.
 - `ACCESS_thermal_metrics.tsv`: forcasted thermal metric data for upper midwest lakes for two periods in the 21st century.
 - `NHD_WBIC.csv`: reference table to match lake ids (wbic) with site ids (some lakes have multiple sites).
