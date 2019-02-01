@@ -1,10 +1,7 @@
 # Fish die-offs are concurrent with thermal extremes in north temperate lakes
 
 ### Authors
-Aaron Till
-Andrew L. Rypel
-Andrew Bray
-Samuel B. Fey
+Aaron Till, Andrew L. Rypel, Andrew Bray, and Samuel B. Fey
 
 
 ### Abstract
