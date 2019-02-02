@@ -3,13 +3,14 @@ library(tidyverse)
 library(broom)
 
 # Load models
-setwd("../data/models") 
-model_names <- list.files()
-final_models <- model_names %>%
-  str_subset("^final") %>%
+setwd("../data/models/") 
+model_names <- c("full_logistic_f1.rds",
+                 "full_ridge_f1_logloss_downsampled.rds",
+                 "full_lasso_f1_logloss_downsampled.rds")
+full_models <- model_names %>%
   map(., ~read_rds(.x))
-final_models <- tibble(name  = str_sub(str_subset(model_names, "^final"), 1, -5),
-                       model = final_models)
+full_models <- tibble(name  = str_sub(model_names, 1, -5),
+                       model = full_models)
 
 # Extract coefficients from each model.
 extract_coef <- function(model, name) {
@@ -38,24 +39,26 @@ extract_coef <- function(model, name) {
   out
 }
 
-final_models <- final_models %>%
+full_models <- full_models %>%
   mutate(coef = map2(model, name, extract_coef),
-         name = factor(name, levels = c("final_logistic_f1_backwards",
-                                        "final_ridge_f1_logloss_downsampled",
-                                        "final_lasso_f1_logloss_downsampled")))
+         name = factor(name, levels = c("full_logistic_f1",
+                                        "full_ridge_f1_logloss_downsampled",
+                                        "full_lasso_f1_logloss_downsampled")))
+
+c(12.7, 2.16, 2.13)
 
 # Plot coefficients.
-p1 <- final_models %>%
+p1 <- full_models %>%
   unnest(coef) %>%
   mutate(name = fct_recode(name,
-                           "Logistic Regression" = "final_logistic_f1_backwards",
-                           "Ridge Regression"    = "final_ridge_f1_logloss_downsampled",
-                           "Lasso Regression"    = "final_lasso_f1_logloss_downsampled")) %>%
+                           "Logistic Regression" = "full_logistic_f1",
+                           "Ridge Regression"    = "full_ridge_f1_logloss_downsampled",
+                           "Lasso Regression"    = "full_lasso_f1_logloss_downsampled")) %>%
   ggplot(aes(x = fct_reorder(term, estimate), 
              y = estimate, 
              fill = estimate > 0)) +
   geom_col(show.legend = FALSE) +
-  facet_wrap(~ name, ncol = 3) +
+  facet_wrap(~ name, ncol = 4) +
   coord_flip() +
   labs(x = NULL,
        y = "Coefficient estimate") +
