@@ -79,7 +79,7 @@ p_timeseries <- ggplot(full_data, aes(x = year)) +
   #geom_line(aes(y = lb_smooth), linetype = "dashed") +
   #geom_line(aes(y = ub_smooth), linetype = "dashed") +
   annotate("text", label = "Historical", x = 2007, y = 36, size = 3) +
-  annotate("text", label = "Early 21st Cent.", x = 2050, y = 36, size = 3) +
+  annotate("text", label = "Mid 21st Cent.", x = 2050, y = 36, size = 3) +
   annotate("text", label = "Late 21st Cent.", x = 2090, y = 36, size = 3) +
   ylab("Total Predicted Summerkills") +
   xlab(NULL) +
