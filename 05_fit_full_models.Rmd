@@ -4,6 +4,8 @@ date: "1/28/2019"
 output: html_document
 ---
 
+A subset of the models are refit using the full historical data set.
+
 ## Load packages
 
 ```{r}
