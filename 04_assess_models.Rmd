@@ -81,7 +81,7 @@ for (i in 1:nrow(all_models)) {
 
 all_models %>%
   add_column(auc, logloss) %>%
-  arrange(desc(auc), logloss)
+  arrange(logloss, desc(auc))
 ```
 
 ## Coefficients
