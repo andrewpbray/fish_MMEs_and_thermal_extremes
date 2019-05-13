@@ -122,5 +122,5 @@ xbox <- grid.arrange(boxplot_a,boxplot_b,ncol = 2, widths = c(6, 3.6))
 ybox <- grid.arrange(boxplot_c,boxplot_d, ncol = 2, widths = c(6, 3.6))
 
 p <- grid.arrange(xbox, ybox)
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5)
+ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5, dpi = 300)
 
