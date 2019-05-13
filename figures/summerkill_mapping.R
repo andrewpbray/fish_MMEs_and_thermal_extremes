@@ -29,7 +29,8 @@ ogrListLayers(dsn2)
 spatial_w  <- readOGR(dsn2, layer = 'wisco_only')
 map_data_w <- fortify(spatial_w) 
 bbox <- c(-92.9, 42.4, -87, 46.9) 
-wisconsin_map <- get_map(bbox, zoom = 7, maptype = 'toner-lines')
+#wisconsin_map <- get_map(bbox, zoom = 7, maptype = 'toner-lite', source = "stamen") # original syntax
+wisconsin_map <- get_stamenmap(bbox, zoom = 7, maptype = "toner-lines")
 
 # Extract model predictions
 # Lasso selected logistic model
@@ -47,13 +48,13 @@ hist_data <- historical_data %>%
   group_by(wbic, lat, lon) %>%
   summarize(prob = sum(prob)) %>%
   mutate(prob = ifelse(prob >= 1, 1, 0)) %>%
-  add_column(generation = "Historical")
+  add_column(generation = "a) Historical")
   
 fut_data <- future_data %>%
   select(wbic, year, lat, lon) %>%
   add_column(p_event) %>%
   mutate(p_no_event = 1 - p_event,
-         generation = ifelse(year > 2070, "Late 21st Century", "Mid 21st Century")) %>%
+         generation = ifelse(year > 2070, "c) Late 21st Century", "b) Mid 21st Century")) %>%
   group_by(wbic, generation) %>%
   summarise(prob = (1 - prod(p_no_event)), 
             lon = mean(lon), 
@@ -62,9 +63,9 @@ fut_data <- future_data %>%
 map_event_data <- hist_data %>%
   bind_rows(fut_data) %>%
   arrange(prob) %>%
-  mutate(generation = factor(generation, levels = c("Historical",
-                                                    "Mid 21st Century",
-                                                    "Late 21st Century")))
+  mutate(generation = factor(generation, levels = c("a) Historical",
+                                                    "b) Mid 21st Century",
+                                                    "c) Late 21st Century")))
 
 # Construct map
 map <- ggmap(wisconsin_map) + 
@@ -87,6 +88,6 @@ map <- ggmap(wisconsin_map) +
 
 map
 
-ggsave("summerkill_mapping.png", map, width = 8, height = 5)
+ggsave("summerkill_mapping.png", map, width = 8, height = 5, dpi = 300)
 
 
