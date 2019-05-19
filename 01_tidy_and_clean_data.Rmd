@@ -216,7 +216,9 @@ rm(thermal_monthly, thermal_annual)
 First the spatial covariates of the lakes.
 
 ```{r}
-spatial <- readOGR("lake_shapes", layer = 'model_lakes')
+setwd('data/raw')
+
+spatial <- readOGR(dsn=path.expand("lake_shapes"), layer = 'model_lakes')
 spatial_df <- coordinates(spatial) %>%
   as.data.frame() %>%
   add_column(site_id = as.character(spatial@data$site_id)) %>%
@@ -244,7 +246,9 @@ df <- df %>%
 Next, the 2010 census block covariates from https://www.census.gov/geo/maps-data/data/tiger-data.html
 
 ```{r}
-census <- readOGR("census_data", layer = 'tabblock2010_55_pophu')
+setwd('data/raw')
+
+census <- readOGR(dsn=path.expand("census_data"), layer = 'tabblock2010_55_pophu')
 census_df <- coordinates(census) %>%
   as.data.frame() %>%
   add_column(population = census@data$POP10) %>%
