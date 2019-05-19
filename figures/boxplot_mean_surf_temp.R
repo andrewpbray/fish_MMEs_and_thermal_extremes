@@ -8,15 +8,15 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data <- read_csv('../data/processed/historical_data.csv')
+historical_data <- read_csv('data/processed/historical_data.csv')
 
 
 # Summer
 
 fig1a_data <- historical_data %>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event')) %>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'SUMMERKILL'), 'Summerkill'))%>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'INFECTIOUS AGENT'), 'Infectious Agent'))
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Summerkill'), 'Summerkill'))%>%
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Infectious Agent'), 'Infectious Agent'))
 
 
 fig1a_data$sig <- factor(ifelse(fig1a_data$cause.category.4 == 'Summerkill', 'p<.05', 'p>.05'),levels = c('p>.05', 'p<.05'))
@@ -69,7 +69,7 @@ boxplot_c <- fig1a_data %>%
 
 fig1b_data <- historical_data %>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Winter Non-event'))  %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'WINTERKILL'), 'Winterkill'))
+  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'Winterkill'), 'Winterkill'))
 
 
 fig1b_data$sig <- ifelse(fig1b_data$cause.category.4 == 'Winterkill', 'p<.05', 'p>.05')
@@ -122,5 +122,5 @@ xbox <- grid.arrange(boxplot_a,boxplot_b,ncol = 2, widths = c(6, 3.6))
 ybox <- grid.arrange(boxplot_c,boxplot_d, ncol = 2, widths = c(6, 3.6))
 
 p <- grid.arrange(xbox, ybox)
-ggsave("boxplot_mean_surf_temp.png", p, width = 8, height = 5, dpi = 300)
+ggsave("figures/boxplot_mean_surf_temp.png", p, width = 8, height = 5, dpi = 300)
 

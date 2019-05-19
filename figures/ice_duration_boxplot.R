@@ -7,16 +7,16 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data = read_csv('data/processed/historical_data.csv')
 
 
 
 fig_SI2_data <- historical_data %>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Winter Non-event')) %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'WINTERKILL'), 'Winterkill'))
+  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'winterkill'), 'Winterkill'))
          
          
-fig_SI2_data$sig_ice <- ifelse(fig_SI2_data$cause.category.4 == 'Winterkill', 'p<.05', 'p>.05')
+fig_SI2_data$sig_ice <- 'p<.05'
 fig_SI2_data$sig_ice <- factor(fig_SI2_data$sig_ice, levels = c('p>.05', 'p<.05'))
 
 boxplot <- fig_SI2_data %>%
@@ -32,9 +32,9 @@ boxplot <- fig_SI2_data %>%
                                  size = 0.5, linetype = "solid"))+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig_ice)) + 
   theme(text = element_text(family = 'sans'))+
-  scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = NULL))
+  scale_fill_manual(values = c('gold'), guide = guide_legend(title = NULL))
 
 boxplot
 
-ggsave("ice_duration_boxplot.png", boxplot, width = 8, height = 5)
+ggsave("figures/ice_duration_boxplot.png", boxplot, width = 8, height = 5)
 

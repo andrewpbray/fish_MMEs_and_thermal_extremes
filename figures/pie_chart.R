@@ -6,8 +6,9 @@ library(scales)
 library(car)
 library(DescTools)
 library(spdep)
+library(wesanderson)
 
-MME <-read_csv("../data/raw/fish_kill_data_10_24_2018.csv",
+MME <-read_csv("data/raw/fish_kill_data_10_24_2018.csv",
                col_types = list(WBIC = col_character(),
                                 Year = col_character()))
 
@@ -37,7 +38,6 @@ fig_S1_data <- MME %>%
 fig_S1_data$pos = (cumsum(c(0, fig_S1_data$count)) + c(fig_S1_data$count / 2, .01))[1:nrow(fig_S1_data)]
 
 
-library(wesanderson)
 pie <- fig_S1_data %>%
  ggplot(aes(x = "", y = count, fill = factor(cause.category.4)))+ 
       geom_bar(width = 1, stat = 'identity') +
@@ -45,11 +45,12 @@ pie <- fig_S1_data %>%
     xlab(NULL) +
     ylab(NULL) + 
     theme_tufte() +
-  scale_fill_manual(values = wes_palette("Darjeeling")[c(1, 4, 2, 3, 5)])
-   # theme(axis.text = element_blank(), axis.ticks = element_blank(), legend.title = element_blank())+
-    #geom_text(aes(y = pos, x = 1.7, label = percent(count/502)),size=3)+
-    #theme(text = element_text(family = 'sans'))
+  scale_fill_manual(values = wes_palette("Darjeeling1")[c(1, 4, 2, 3, 5)])+
+    theme(axis.text = element_blank(), axis.ticks = element_blank(), legend.title = element_blank())+
+    geom_text(aes(y = pos, x = 1.7, label = percent(count/502)),size=3)+
+    theme(text = element_text(family = 'sans'))
     
+pie
     
-ggsave("pie_chart.png", pie, width = 8, height = 5)
+ggsave("figures/pie_chart.png", pie, width = 8, height = 5)
   

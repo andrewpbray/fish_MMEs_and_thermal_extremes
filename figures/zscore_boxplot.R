@@ -7,13 +7,13 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data = read_csv('processed/data/historical_data.csv')
 
 
 fig_SI1_data <- historical_data %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'ANTHROPOGENIC CONDITION'), 'Human Perturbation')) %>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'WINTERKILL'), 'Winterkill'))%>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'INFECTIOUS AGENT'), 'Infectious Agent'))
+  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'Anthropogenic Condition'), 'Human Perturbation')) %>%
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Winterkill'), 'Winterkill'))%>%
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Infectious Agent'), 'Infectious Agent'))
 
 fig_SI1_data$sig_all <- ifelse(fig_SI1_data$cause.category.4 == 'Winterkill', 'p<.05', 'p>.05')
 fig_SI1_data$sig_all <- factor(fig_SI1_data$sig_all, levels = c('p>.05', 'p<.05'))
@@ -36,18 +36,8 @@ boxplot <- fig_SI1_data %>%
 
 boxplot
 
-ggsave("zscore_boxplot.png", boxplot, width = 8, height = 5)
+ggsave("figures/zscore_boxplot.png", boxplot, width = 8, height = 5)
 
 
 
-#### TEST ####
 
-fig_SI1_data_dunnet = fig_SI1_data%>%
-  filter(month %in% c('aug', 'sep', 'jun', 'jul')) %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event')) %>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'SUMMERKILL'), 'Summerkill'))
-
-
-
-DunnettTest(mean_surf_z ~ factor(cause.category.4), data = fig_SI1_data_dunnet,
-            control = 'Summer Non-event')

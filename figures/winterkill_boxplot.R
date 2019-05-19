@@ -7,10 +7,10 @@ library(car)
 library(DescTools)
 library(spdep)
 
-historical_data = read_csv('../processed-data/historical_data.csv')
+historical_data = read_csv('data/processed/historical_data.csv')
 
 
-snow_data = read_csv('../processed-data/snow_data.csv')
+snow_data = read_csv('data/processed/snow_data.csv')
 
 snow_data = snow_data %>%
   mutate(month = ifelse(Month == '01', 'jan', Month)) %>%
@@ -31,7 +31,7 @@ fig_SI4_data <- inner_join(fig_SI4_data, snow_data, by = c('year', 'month', 'lat
   
   
 fig_SI4_data = fig_SI4_data %>%  
-  mutate(mme_binary = ifelse(is.na(mme), 0, mme), 
+  mutate(mme = ifelse(is.na(cause.category.4), 0, 1), 
          winterkill = ifelse(is.na(winterkill), 0 , winterkill))
 
 
@@ -57,4 +57,4 @@ boxplot <- fig_SI4_data %>%
 
 boxplot
 
-ggsave("winterkill_boxplot.png", boxplot, width = 8, height = 5)
+ggsave("figures/winterkill_boxplot.png", boxplot, width = 8, height = 5)
