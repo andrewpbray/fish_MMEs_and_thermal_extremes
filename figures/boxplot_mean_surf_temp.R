@@ -50,12 +50,11 @@ boxplot_c <- fig1a_data %>%
   theme_tufte() +
   ylab('Z-score Mean Surf. Temp') +
   guides(fill = FALSE) +
-  theme(text = element_text(size=13), 
+  theme(text = element_text(size = 13, family = 'sans'), 
+        axis.text = element_text(size = 11),
         axis.line = element_line(colour = "black", 
-                                 size = 0.5, linetype = "solid"))+
+                                 size = 0.5, linetype = "solid")) +
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) +
-  theme(text = element_text(family = 'sans')) +
-  theme(axis.text = element_text(size=13)) +
   xlab(NULL) +
   geom_hline(yintercept = 0, alpha = 0.5) + 
   ggtitle('c') +
@@ -67,8 +66,9 @@ boxplot_c <- fig1a_data %>%
 # Winter
 
 fig1b_data <- historical_data %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Winter Non-event'))  %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(cause.category.4 == 'Winterkill'), 'Winterkill'))
+  mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Winter Non-event'),
+         cause.category.4 = fct_recode(cause.category.4,
+                                       "Winterkill" = "winterkill"))
 
 
 fig1b_data$sig <- ifelse(fig1b_data$cause.category.4 == 'Winterkill', 'p<.05', 'p>.05')
@@ -103,7 +103,7 @@ boxplot_d <- fig1b_data %>%
   xlab('Category of Killtype')+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) +
   theme(text = element_text(size=13),
-        axis.text = element_text(size = 13),
+        axis.text = element_text(size = 11),
         axis.line = element_line(colour = "black", 
                    size = 0.5, linetype = "solid"))+
   xlab(NULL) +
@@ -117,8 +117,8 @@ boxplot_d <- fig1b_data %>%
   scale_fill_manual(values = c('grey', 'grey'))
 
 
-xbox <- grid.arrange(boxplot_a,boxplot_b,ncol = 2, widths = c(6, 3.6))
-ybox <- grid.arrange(boxplot_c,boxplot_d, ncol = 2, widths = c(6, 3.6))
+xbox <- grid.arrange(boxplot_a, boxplot_b,ncol = 2, widths = c(6, 3.6))
+ybox <- grid.arrange(boxplot_c, boxplot_d, ncol = 2, widths = c(6, 3.6))
 
 p <- grid.arrange(xbox, ybox)
 ggsave("figures/boxplot_mean_surf_temp.png", p, width = 8, height = 5, dpi = 300)
