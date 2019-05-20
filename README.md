@@ -16,3 +16,14 @@ The code to perform the analysis found the manuscript is organized into a series
 5. `fit_full_models.Rmd`: Fit subset of models on full historical data.
 
 Each of the figures in the manuscript is created by an R script in the `/figures` subdirectory.
+
+### Data
+The data set for this project fall into three categories: raw data, processed data, and model data. All three are available in the "releases" associated with this repository. You can either download the large zip file containing all of the data via github, or use R to download it directly into a repository that has been locally cloned.
+
+```
+# install.packages("piggyback")
+# require(piggyback)
+pb_download(repo = "andrewpbray/fish_MMEs_and_thermal_extremes", 
+            tag  = "v0.0.1",
+            dest = "data")
+```
