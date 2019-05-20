@@ -15,8 +15,8 @@ historical_data <- read_csv('data/processed/historical_data.csv')
 
 fig1a_data <- historical_data %>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event')) %>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Summerkill'), 'Summerkill'))%>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'Infectious Agent'), 'Infectious Agent'))
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'summerkill'), 'Summerkill'))%>%
+  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'infectious Agent'), 'Infectious Agent'))
 
 
 fig1a_data$sig <- factor(ifelse(fig1a_data$cause.category.4 == 'Summerkill', 'p<.05', 'p>.05'),levels = c('p>.05', 'p<.05'))
