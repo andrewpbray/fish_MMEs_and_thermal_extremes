@@ -14,19 +14,19 @@ historical_data <- read_csv('data/processed/historical_data.csv')
 # Summer
 
 fig1a_data <- historical_data %>%
-  mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event')) %>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'summerkill'), 'Summerkill'))%>%
-  mutate(cause.category.4 =  replace(as.character(cause.category.4), which(cause.category.4 == 'infectious Agent'), 'Infectious Agent'))
-
+  mutate(cause.category.4 = as.factor(replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event')),
+         cause.category.4 = fct_recode(cause.category.4,
+                                       "Infectious Agent" = "infectious agent",
+                                       "Summerkill"       = "summerkill"))
 
 fig1a_data$sig <- factor(ifelse(fig1a_data$cause.category.4 == 'Summerkill', 'p<.05', 'p>.05'),levels = c('p>.05', 'p<.05'))
 
 boxplot_a <- fig1a_data %>%
   filter(month %in% c("jul", "jun", "aug", "sep")) %>%
   filter(cause.category.4 %in% c('Infectious Agent', "Summerkill", "Summer Non-event")) %>%   
-  ggplot(aes(y = mean_surf,x = cause.category.4)) +
+  ggplot(aes(y = mean_surf, x = cause.category.4)) +
   theme_tufte() +  
-  ylab('Mean Surf. Temp. (°C)')+
+  ylab('Mean Surf. Temp. (°C)') +
   theme(text = element_text(size=13),
         axis.text = element_text(size=13),
         legend.justification = c(1, -0.4), 
@@ -36,8 +36,8 @@ boxplot_a <- fig1a_data %>%
                                  size = 0.5, linetype = "solid"),
         axis.title.x=element_blank(),
         axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())+
-  xlab(NULL)+
+        axis.ticks.x=element_blank()) +
+  xlab(NULL) +
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) + 
   ggtitle('a') +
   theme(text = element_text(family = 'sans'))+
@@ -54,11 +54,10 @@ boxplot_c <- fig1a_data %>%
         axis.line = element_line(colour = "black", 
                                  size = 0.5, linetype = "solid"))+
   geom_boxplot(outlier.alpha = 0.1, aes(fill = sig)) +
-  theme(text = element_text(family = 'sans'))+
-  theme(axis.text = element_text(size=13))+
-  
+  theme(text = element_text(family = 'sans')) +
+  theme(axis.text = element_text(size=13)) +
   xlab(NULL) +
-  geom_hline(yintercept = 0, alpha = 0.5)+ 
+  geom_hline(yintercept = 0, alpha = 0.5) + 
   ggtitle('c') +
   scale_fill_manual(values = c('grey', 'gold'), guide = guide_legend(title = 'T-test'))
 
