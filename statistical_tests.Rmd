@@ -198,8 +198,6 @@ rm(winterkill_data)
 
 ### Moran Tests
 
-
-
 ```{r}
 fig3a_data <-historical_data %>%
   mutate(summerkill_binary = ifelse(is.na(summerkill) | summerkill == 'neg', 0 , 1)) %>%
@@ -208,7 +206,7 @@ fig3a_data <-historical_data %>%
 
 fig3b_data <- future_data %>%
   dplyr::select(wbic, lat, lon, year) %>%
-  bind_cols(predictions_1)%>%
+  bind_cols(predictions_1) %>%
   mutate(event = pos) %>%
   mutate(no_event_prob = 1 - event) %>%
   filter(year > 2030 & year < 2070) %>%
