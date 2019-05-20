@@ -448,7 +448,7 @@ tidy_snow <- function(path) {
 ```
 
 ```{r}
-setwd("PRISM_precip")
+setwd("data/raw/PRISM_precip")
 file_names <- list.files() %>%
   str_subset("asc$")
 snow_data <- map_df(file_names, tidy_snow)
