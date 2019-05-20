@@ -5,7 +5,6 @@ output: html_document
 
 
 ```{r loading packages}
-
 library(ggplot2)
 library(ggthemes)
 library(ggmap)
@@ -16,30 +15,22 @@ library(DescTools)
 library(spdep)
 library(readr)
 library(dplyr)
-
 ```
 
 
 ```{r general data}
+historical_data <- read_csv('data/processed/historical_data.csv')
+future_data     <- read_csv('data/processed/future_data.csv')
+snow_data       <- read_csv('data/processed/snow_data.csv') 
 
-
-historical_data = read_csv('data/processed/historical_data.csv')
-
-future_data = read_csv('data/processed/future_data.csv')
-
-snow_data = read_csv('data/processed/snow_data.csv') 
-
-snow_data$month = tolower(month.abb[as.numeric(snow_data$Month)])
-snow_data$year = snow_data$Year
-
-
+snow_data$month <- tolower(month.abb[as.numeric(snow_data$Month)])
+snow_data$year  <- snow_data$Year
 ```
 
 
 ### Summerkill Statistics
 
 ```{r summer data}
-
 fig1ab_data <- historical_data %>% 
   filter(month %in% c('jun', 'jul', 'aug', 'sep'))%>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Summer Non-event'))%>%
@@ -50,78 +41,52 @@ fig1ab_data <- historical_data %>%
 We use a Dunnett's test to compare the means of various kill categories against the mean of non kill lakes
 
 ```{r dunnet kill category ~ temperature}
-
 DunnettTest(mean_surf~ factor(cause.category.4), data = fig1ab_data, control = 'Summer Non-event')
-
 ```
 
 ```{r normal distributionplot temp for non-events}
-
-control_data = fig1ab_data %>% filter(cause.category.4 == 'Summer Non-event')
-
+control_data <- fig1ab_data %>% 
+  filter(cause.category.4 == 'Summer Non-event')
 qqnorm(control_data$mean_surf)
-
-
 ```
 
 ```{r normal distribution plot temp for summerkill}
-
 summerkill_data = fig1ab_data %>% filter(cause.category.4 == 'summerkill')
-
 qqnorm(summerkill_data$mean_surf)
-
-
 ```
 
 ```{r normal distribution plot temp for infectious}
-
-inf_data = fig1ab_data %>% filter(cause.category.4 == 'infectious agent')
-
+inf_data <- fig1ab_data %>%
+  filter(cause.category.4 == 'infectious agent')
 qqnorm(inf_data$mean_surf)
-
-
 ```
 
 We use a Welch's t-test as opposed to a student's t-test to control for the uneven variance between sample groups when comparing event to non-event lakes directly 
 
 ```{r ttest summerkill~zscore}
-
-
-ttest_1a  = t.test(mean_surf_z ~ summerkill, data = fig1ab_data)
+ttest_1a  <- t.test(mean_surf_z ~ summerkill, data = fig1ab_data)
 ttest_1a
-
-
 ```
 
 ```{r normal distribution plot zscore for summerkill}
-
-summerkill_data = fig1ab_data %>% filter(cause.category.4 == 'summerkill')
-control_data = fig1ab_data %>% filter(cause.category.4 == 'Summer Non-event')
-
+summerkill_data <- fig1ab_data %>% filter(cause.category.4 == 'summerkill')
+control_data <- fig1ab_data %>% filter(cause.category.4 == 'Summer Non-event')
 qqplot(x = control_data$mean_surf_z, y = summerkill_data$mean_surf_z)
-
 rm(summerkill_data)
-
 ```
 
 
 ```{r ttest infectious kill~zscore}
-
-ttest_1b  = t.test(mean_surf_z ~ infectious, data = fig1ab_data)
+ttest_1b <- t.test(mean_surf_z ~ infectious, data = fig1ab_data)
 ttest_1b
-
 ```
 
 ```{r normal distribution plot zscore for infectious vs non-events}
-
-inf_data = fig1ab_data %>% filter(cause.category.4 == 'infectious agent')
-control_data = fig1ab_data %>% filter(cause.category.4 == 'Summer Non-event')
-
+inf_data <- fig1ab_data %>% filter(cause.category.4 == 'infectious agent')
+control_data <- fig1ab_data %>% filter(cause.category.4 == 'Summer Non-event')
 qqplot(x = control_data$mean_surf_z, y = inf_data$mean_surf_z)
-
 rm(inf_data)
 rm(control_data)
-
 ```
 
 
@@ -130,67 +95,51 @@ rm(control_data)
 We run an ANOVA to compare the difference in mean temperature for winterkill vs non-event lakes
 
 ```{r anova winterkill~temperature}
-
 fig1bd_data <- historical_data %>%
   filter(month %in% c('dec', 'jan', 'feb')) %>%
   mutate(cause.category.4 = replace(as.character(cause.category.4), which(is.na(cause.category.4)), 'Winter Non-event')) %>% 
   mutate(winterkill = ifelse(cause.category.4 == 'winterkill', 1, 0))
 
-anova_data = fig1bd_data  %>% filter(cause.category.4 == 'Winter Non-event'| cause.category.4 == 'winterkill')
+anova_data <- fig1bd_data  %>% 
+  filter(cause.category.4 == 'Winter Non-event'| cause.category.4 == 'winterkill')
 anova <- aov(mean_surf ~ factor(cause.category.4), anova_data)
 summary(anova)
-
 #tuk <- TukeyHSD(anova)
 #tuk
-
 ```
 
 ```{r normal distributionplot temp for winter non-events}
-
-control_data = fig1bd_data %>% filter(cause.category.4 == 'Winter Non-event')
-
+control_data <- fig1bd_data %>%
+  filter(cause.category.4 == 'Winter Non-event')
 qqnorm(control_data$mean_surf)
-
-
 ```
 
 ```{r normal distribution plot temp for winterkill}
-
-winterkill_data = fig1bd_data %>% filter(cause.category.4 == 'winterkill')
-
+winterkill_data <- fig1bd_data %>% 
+  filter(cause.category.4 == 'winterkill')
 qqnorm(winterkill_data$mean_surf)
-
-
 ```
 
 ```{r normal distribution plot temp for winter vs non event}
-
 qqplot(control_data$mean_surf, winterkill_data$mean_surf)
-
 ```
 
 We use a Welch's t-test rather an a student due to unequal sizes between the two populations
 
 
 ```{r ttest winterkill~zscore}
-  
-ttest_1d  = t.test(mean_surf_z ~ winterkill, data = fig1bd_data)
+ttest_1d <- t.test(mean_surf_z ~ winterkill, data = fig1bd_data)
 ttest_1d
-
 ```
 
 ```{r normal distribution plot zscore for winter vs non event}
-
 qqplot(control_data$mean_surf_z, winterkill_data$mean_surf_z)
-
 rm(control_data)
 rm(winterkill_data)
-
 ```
 
 
 ```{r anova winterkill~snow}
-
 fig_SI3_data <- historical_data %>%   
   filter(month %in% c('dec', 'jan', 'feb'))  %>%
   mutate(lat_round = round(lat, 1), long_round = round(lon, 1)) %>%
@@ -199,17 +148,15 @@ fig_SI3_data <- historical_data %>%
 
 anova_snow <- aov(Snow ~ factor(winterkill), fig_SI3_data)
 summary(anova_snow)
-
 #tuk <- TukeyHSD(anova_snow)
 #tuk
-
 ```
 
 ```{r normal distribution plot snow for winterkill vs non event}
-
-control_data = fig_SI3_data %>% filter(winterkill == 0)
-winterkill_data = fig_SI3_data %>% filter(winterkill == 1)
-
+control_data <- fig_SI3_data %>%
+  filter(winterkill == 0)
+winterkill_data <- fig_SI3_data %>% 
+  filter(winterkill == 1)
 
 qqplot(control_data$Snow, winterkill_data$Snow)
 
@@ -220,64 +167,44 @@ rm(winterkill_data)
 We employ a one sample t-test to see if the mean zscore is different from zero
 
 ```{r ttest winterkill~zscore all seasons}
-
-
-ttest_data_z = filter(historical_data, cause.category.4 == 'winterkill')
-
+ttest_data_z <- filter(historical_data, cause.category.4 == 'winterkill')
 t.test(ttest_data_z$mean_surf_z, mu = 0)
-
-
 ```
 
 
 
 ```{r anova winterkill~ice duration}
-
-
 fig_SI4_data <- historical_data  %>%
-  mutate(winterkill = ifelse(!is.na(cause.category.4) & cause.category.4 == 'winterkill', 1, 0)) %>%
+  mutate(winterkill = ifelse(!is.na(cause.category.4) & 
+                               cause.category.4 == 'winterkill', 1, 0)) %>%
   group_by(year, wbic) %>%
   summarise(ice_duration = mean(ice_duration), winterkill = max(winterkill))
-
-
 
 anova <- aov(ice_duration ~ winterkill, fig_SI4_data)
 summary(anova)
 #tuk <- TukeyHSD(anova)
 #tuk
-
-
 ```
 
 
 ```{r normal distribution plot ice_duration for winterkill vs non event}
-
-control_data = fig_SI4_data %>% filter(winterkill == 0)
-winterkill_data = fig_SI4_data %>% filter(winterkill == 1)
-
-
+control_data <- fig_SI4_data %>% filter(winterkill == 0)
+winterkill_data <- fig_SI4_data %>% filter(winterkill == 1)
 qqplot(control_data$ice_duration, winterkill_data$ice_duration)
-
 rm(control_data)
 rm(winterkill_data)
-
 ```
-
-
 
 
 ### Moran Tests
 
 
 
-``{r}
-
-
+```{r}
 fig3a_data <-historical_data %>%
   mutate(summerkill_binary = ifelse(is.na(summerkill) | summerkill == 'neg', 0 , 1)) %>%
   group_by(wbic) %>%
   summarise(MME = max(summerkill_binary), V1 = mean(lon), V2 = mean(lat))
-
 
 fig3b_data <- future_data %>%
   dplyr::select(wbic, lat, lon, year) %>%
@@ -288,8 +215,6 @@ fig3b_data <- future_data %>%
   group_by(wbic) %>%
   summarise(prob = (1 - prod(no_event_prob)), V1 = mean(lon), V2 = mean(lat)) 
 
-
-
 fig3c_data <- future_data %>%
   dplyr::select(wbic, lat, lon, year) %>%
   bind_cols(predictions_1)%>%
@@ -299,38 +224,23 @@ fig3c_data <- future_data %>%
   group_by(wbic) %>%
   summarise(prob = (1 - prod(no_event_prob)), V1 = mean(lon), V2 = mean(lat)) 
 
-
-
-
 coordinates(fig3a_data) <- c('V1', 'V2')
-
 coordinates(fig3b_data) <- c('V1', 'V2')
-
 coordinates(fig3c_data) <- c('V1', 'V2')
-
 
 nb_p1 <- knn2nb(knearneigh(coordinates(coordinates(fig3a_data)),longlat = TRUE, k = 2))
 nb_p2 <- knn2nb(knearneigh(coordinates(coordinates(fig3b_data)),longlat = TRUE, k = 2))
 nb_p3 <- knn2nb(knearneigh(coordinates(coordinates(fig3c_data)),longlat = TRUE, k = 2))
 
-
-
 weights_p1 <- nb2listw(nb_p1)
 weights_p2 <- nb2listw(nb_p2)
 weights_p3 <- nb2listw(nb_p3)
 
-
-
-moran_MME <- moran.test(fig3a_data$MME, weights_p1)
+moran_MME   <- moran.test(fig3a_data$MME, weights_p1)
 moran_Prob2 <- moran.test(fig3b_data$prob, weights_p2)
 moran_Prob3 <- moran.test(fig3c_data$prob, weights_p3)
-
 
 moran_MME
 moran_Prob2
 moran_Prob3
-
-
-
-
 ```
